@@ -1,0 +1,4346 @@
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import api from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
+import {
+  formatCurrency,
+  formatDate,
+  getCreditScoreTier,
+} from '../lib/utils';
+
+import {
+  ShieldCheck,
+  Users,
+  ArrowLeftRight,
+  Activity,
+  Clock,
+  Wallet,
+  DollarSign,
+  BadgeCheck,
+  Search,
+  ToggleRight,
+  ToggleLeft,
+  Crown,
+  Lock,
+  TrendingUp,
+  TrendingDown,
+  CheckCircle,
+  XCircle,
+  X,
+  Plus,
+  Trash2,
+  FileText,
+  Database,
+  Loader2,
+  Landmark,
+  Check,
+  Gift,
+  Headphones,
+  Bell,
+  Send,
+  Eye,
+  MessageSquare,
+  Megaphone,
+  AlertTriangle,
+  ShieldAlert,
+  UserCheck,
+  User,
+  ChevronDown,
+  Scale,
+  Banknote,
+  KeyRound,
+  HandCoins,
+  CalendarDays,
+  Languages,
+  WalletCards,
+  Snowflake,
+  Unlock,
+  RefreshCw,
+} from 'lucide-react';
+
+/* =========================================================
+   SAFE HELPERS
+========================================================= */
+
+function asArray(value, keys = []) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (value && typeof value === 'object') {
+    for (const key of keys) {
+      if (Array.isArray(value[key])) {
+        return value[key];
+      }
+    }
+  }
+
+  return [];
+}
+
+function num(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function getId(item) {
+  return item?._id || item?.id || '';
+}
+
+function getApiError(err, fallback = 'Something went wrong.') {
+  return (
+    err?.response?.data?.message ||
+    err?.response?.data?.error ||
+    err?.message ||
+    fallback
+  );
+}
+
+/* =========================================================
+   TABS
+========================================================= */
+
+const TABS = [
+  { id: 'users', label: 'Users', icon: Users },
+  { id: 'verify', label: 'Verify', icon: ShieldCheck },
+  { id: 'txns', label: 'Txns', icon: FileText },
+  { id: 'data', label: 'Data', icon: Database },
+  { id: 'wallets', label: 'Wallets', icon: WalletCards },
+  { id: 'notifications', label: 'Notifications', icon: Bell },
+];
+
+/* =========================================================
+   SPINNER
+========================================================= */
+
+function Spinner() {
+  return (
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="w-10 h-10 border-4 border-gold-500/40 border-t-gold-500 rounded-full animate-spin" />
+    </div>
+  );
+}
+
+/* =========================================================
+   STAT CARD
+========================================================= */
+
+function StatCard({
+  icon: Icon,
+  label,
+  value,
+  color = 'sky',
+  sub,
+}) {
+  const colors = {
+    sky: 'bg-gold-500/10 text-gold-500',
+    emerald: 'bg-emerald-500/15 text-emerald-600',
+    blue: 'bg-gold-500/10 text-gold-500',
+    red: 'bg-red-500/15 text-red-600',
+    violet: 'bg-gold-500/10 text-gold-500',
+    cyan: 'bg-gold-500/10 text-gold-500',
+  };
+
+  const borderColors = {
+    sky: 'hover:border-gold-500/40',
+    emerald: 'hover:border-emerald-500/30',
+    blue: 'hover:border-gold-500/40',
+    red: 'hover:border-red-500/30',
+    violet: 'hover:border-gold-500/40',
+    cyan: 'hover:border-gold-500/40',
+  };
+
+  return (
+    <div
+      className={`bg-zinc-900 rounded-xl shadow-sm border border-gold-500/30 p-5 transition-colors ${
+        borderColors[color] || borderColors.sky
+      }`}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div
+          className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+            colors[color] || colors.sky
+          }`}
+        >
+          <Icon className="w-5 h-5" />
+        </div>
+      </div>
+
+      <p className="text-zinc-400 text-xs font-medium uppercase tracking-wider">
+        {label}
+      </p>
+
+      <p className="font-heading text-xl font-bold text-zinc-50 mt-1">
+        {value}
+      </p>
+
+      {sub && (
+        <p className="text-zinc-400 text-xs mt-1">
+          {sub}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* =========================================================
+   DIALOG
+========================================================= */
+
+function Dialog({
+  open,
+  onClose,
+  title,
+  children,
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        onClick={onClose}
+      />
+
+      <div className="relative bg-zinc-900 border border-gold-500/30 rounded-xl shadow-xl w-full max-w-md mx-4 p-6 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-heading text-lg font-bold text-zinc-50">
+            {title}
+          </h3>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-zinc-900 text-zinc-400 hover:text-zinc-300 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   AMOUNT DIALOG
+========================================================= */
+
+function AmountDialog({
+  title,
+  label,
+  icon: Icon,
+  actionLabel,
+  onSubmit,
+  onClose,
+}) {
+  const [amount, setAmount] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleSubmit() {
+    const value = parseFloat(amount);
+
+    if (!value || value <= 0) {
+      setError('Please enter a valid amount.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      await onSubmit(value);
+    } catch (err) {
+      console.error(err);
+      setError(getApiError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={title}
+    >
+      <div className="space-y-4">
+        <div>
+          <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider mb-2 block">
+            {label}
+          </label>
+
+          <div className="relative">
+            <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={amount}
+              onChange={(e) => {
+                setAmount(e.target.value);
+                setError('');
+              }}
+              placeholder="0.00"
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-10 pr-4 py-2.5 text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500 focus:border-gold-500"
+            />
+          </div>
+        </div>
+
+        {error && (
+          <div className="bg-red-500/15 border border-red-500/25 rounded-lg p-3 text-red-600 text-xs">
+            {error}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={loading || !amount}
+          className="w-full py-2.5 rounded-lg text-sm font-semibold bg-gold-600 hover:bg-gold-700 text-white transition-colors disabled:opacity-50"
+        >
+          {loading ? 'Processing...' : actionLabel}
+        </button>
+      </div>
+    </Dialog>
+  );
+}
+
+/* =========================================================
+   USER CARD
+========================================================= */
+
+function UserCard({
+  user: u,
+  onRefresh,
+}) {
+  const [balanceDialog, setBalanceDialog] =
+    useState(false);
+
+  const [loginPasswordDialog, setLoginPasswordDialog] =
+    useState(false);
+
+  const [withdrawPasswordDialog, setWithdrawPasswordDialog] =
+    useState(false);
+
+  const [creditDialog, setCreditDialog] =
+    useState(false);
+
+  const [depositDialog, setDepositDialog] =
+    useState(false);
+
+  const [withdrawDialog, setWithdrawDialog] =
+    useState(false);
+
+  const [profitDialog, setProfitDialog] =
+    useState(false);
+
+  const [freezeDialog, setFreezeDialog] =
+    useState(false);
+
+  const [unfreezeDialog, setUnfreezeDialog] =
+    useState(false);
+
+  const [balanceAmount, setBalanceAmount] =
+    useState('');
+
+  const [balanceAction, setBalanceAction] =
+    useState('add');
+
+  const [newPassword, setNewPassword] =
+    useState('');
+
+  const [withdrawPassword, setWithdrawPassword] =
+    useState('');
+
+  const [creditScore, setCreditScore] =
+    useState('');
+
+  const [freezeAmount, setFreezeAmount] =
+    useState('');
+
+  const [unfreezeAmount, setUnfreezeAmount] =
+    useState('');
+
+  const [loading, setLoading] =
+    useState(false);
+
+  const tier = getCreditScoreTier(
+    num(u.credit_score)
+  );
+
+  const userId = getId(u);
+
+  const totalBalance = Math.max(
+    0,
+    num(u.balance)
+  );
+
+  const frozenBalance = Math.max(
+    0,
+    num(u.frozen_balance)
+  );
+
+  const availableBalance = Math.max(
+    0,
+    totalBalance - frozenBalance
+  );
+
+  async function runAction(fn, reset) {
+    setLoading(true);
+
+    try {
+      await fn();
+      await onRefresh();
+      if (reset) reset();
+    } catch (err) {
+      console.error(err);
+      alert(getApiError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleToggle(field) {
+    await runAction(() =>
+      api.post(
+        `/users/${userId}/toggle`,
+        { field }
+      )
+    );
+  }
+
+  async function handleBalance() {
+    const amount = parseFloat(balanceAmount);
+
+    if (!amount || amount <= 0) {
+      alert('Enter a valid amount.');
+      return;
+    }
+
+    if (
+      balanceAction === 'deduct' &&
+      amount > availableBalance
+    ) {
+      alert(
+        `Available balance is only ${availableBalance.toFixed(
+          2
+        )} USDT.`
+      );
+      return;
+    }
+
+    await runAction(
+      () =>
+        api.post(
+          `/users/${userId}/adjust-balance`,
+          {
+            action: balanceAction,
+            amount,
+          }
+        ),
+      () => {
+        setBalanceDialog(false);
+        setBalanceAmount('');
+      }
+    );
+  }
+
+  async function handleFreeze() {
+    const amount = parseFloat(freezeAmount);
+
+    if (!amount || amount <= 0) {
+      alert('Enter a valid freeze amount.');
+      return;
+    }
+
+    if (amount > availableBalance) {
+      alert(
+        `You can freeze maximum ${availableBalance.toFixed(
+          2
+        )} USDT.`
+      );
+      return;
+    }
+
+    await runAction(
+      () =>
+        api.post(
+          `/users/${userId}/freeze`,
+          { amount }
+        ),
+      () => {
+        setFreezeDialog(false);
+        setFreezeAmount('');
+      }
+    );
+  }
+
+  async function handleUnfreeze() {
+    const amount = parseFloat(unfreezeAmount);
+
+    if (!amount || amount <= 0) {
+      alert('Enter a valid unfreeze amount.');
+      return;
+    }
+
+    if (amount > frozenBalance) {
+      alert(
+        `Frozen balance is only ${frozenBalance.toFixed(
+          2
+        )} USDT.`
+      );
+      return;
+    }
+
+    await runAction(
+      () =>
+        api.post(
+          `/users/${userId}/unfreeze`,
+          { amount }
+        ),
+      () => {
+        setUnfreezeDialog(false);
+        setUnfreezeAmount('');
+      }
+    );
+  }
+
+  async function handleLoginPassword() {
+    if (!newPassword.trim()) {
+      alert('Enter a new password.');
+      return;
+    }
+
+    await runAction(
+      () =>
+        api.post(
+          `/users/${userId}/set-password`,
+          {
+            password: newPassword,
+          }
+        ),
+      () => {
+        setLoginPasswordDialog(false);
+        setNewPassword('');
+      }
+    );
+  }
+
+  async function handleWithdrawPassword() {
+    if (!withdrawPassword.trim()) {
+      alert('Enter a withdrawal password.');
+      return;
+    }
+
+    await runAction(
+      () =>
+        api.post(
+          `/users/${userId}/set-withdrawal-password`,
+          {
+            withdrawal_password:
+              withdrawPassword,
+          }
+        ),
+      () => {
+        setWithdrawPasswordDialog(false);
+        setWithdrawPassword('');
+      }
+    );
+  }
+
+  async function handleCredit() {
+    const score = parseInt(creditScore, 10);
+
+    if (!Number.isFinite(score)) {
+      alert('Enter a valid credit score.');
+      return;
+    }
+
+    await runAction(
+      () =>
+        api.post(
+          `/users/${userId}/set-credit-score`,
+          {
+            score,
+          }
+        ),
+      () => {
+        setCreditDialog(false);
+        setCreditScore('');
+      }
+    );
+  }
+
+  return (
+    <>
+      <div className="bg-zinc-900 rounded-xl shadow-sm border border-gold-500/30 p-4 space-y-3">
+
+        {/* HEADER */}
+        <div className="flex items-start justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center text-sm font-bold text-white flex-shrink-0">
+              {u.full_name?.[0]?.toUpperCase() || 'U'}
+            </div>
+
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-zinc-50 font-semibold text-sm truncate">
+                  {u.full_name || 'Unknown User'}
+                </p>
+
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gold-500/10 text-gold-500">
+                  {u.role || 'user'}
+                </span>
+
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                    u.identity_status === 'verified'
+                      ? 'bg-emerald-500/15 text-emerald-600'
+                      : u.identity_status === 'pending'
+                      ? 'bg-amber-500/15 text-amber-600'
+                      : 'bg-red-500/15 text-red-600'
+                  }`}
+                >
+                  {u.identity_status || 'unverified'}
+                </span>
+
+                {u.has_withdrawal_password ? (
+                  <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/15 text-emerald-600">
+                    <KeyRound className="w-3 h-3" />
+                    WD Set
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-500/15 text-red-600">
+                    <KeyRound className="w-3 h-3" />
+                    WD Not Set
+                  </span>
+                )}
+              </div>
+
+              <p className="text-zinc-400 text-xs truncate">
+                {u.email || '-'}
+              </p>
+
+              <p className="flex items-center gap-1 text-zinc-400 text-[11px] mt-0.5">
+                <CalendarDays className="w-3 h-3" />
+                Joined{' '}
+                {u.createdAt
+                  ? formatDate(u.createdAt)
+                  : '-'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* USER INFORMATION */}
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2.5 text-xs pt-2">
+
+          <div className="bg-gold-500/10 rounded-lg p-2.5">
+            <span className="text-zinc-400">
+              Balance
+            </span>
+            <p className="text-zinc-50 font-semibold">
+              {formatCurrency(totalBalance)}
+            </p>
+          </div>
+
+          <div className="bg-gold-500/10 rounded-lg p-2.5">
+            <span className="flex items-center gap-1 text-gold-500">
+              <Snowflake className="w-3 h-3" />
+              Frozen
+            </span>
+            <p className="text-gold-600 font-semibold">
+              {formatCurrency(frozenBalance)}
+            </p>
+          </div>
+
+          <div className="bg-emerald-500/15 rounded-lg p-2.5">
+            <span className="text-zinc-400">
+              Available
+            </span>
+            <p className="text-emerald-700 font-semibold">
+              {formatCurrency(availableBalance)}
+            </p>
+          </div>
+
+          <div className="bg-emerald-500/15 rounded-lg p-2.5">
+            <span className="text-zinc-400">
+              Total Deposited
+            </span>
+            <p className="text-emerald-700 font-semibold">
+              {formatCurrency(num(u.total_deposited))}
+            </p>
+          </div>
+
+          <div className="bg-red-500/15 rounded-lg p-2.5">
+            <span className="text-zinc-400">
+              Total Withdrawn
+            </span>
+            <p className="text-red-700 font-semibold">
+              {formatCurrency(num(u.total_withdrawn))}
+            </p>
+          </div>
+
+          <div className="bg-gold-500/10 rounded-lg p-2.5">
+            <span className="text-zinc-400">
+              Total Profit
+            </span>
+            <p className="text-gold-600 font-semibold">
+              {formatCurrency(num(u.total_profit))}
+            </p>
+          </div>
+
+          <div className="bg-gold-500/10 rounded-lg p-2.5">
+            <span className="text-zinc-400">
+              Credit Score
+            </span>
+
+            <div className="flex items-center gap-1.5">
+              <p className="text-zinc-50 font-semibold">
+                {num(u.credit_score)}
+              </p>
+
+              <span
+                className={`px-1 py-0.5 rounded text-[9px] font-medium ${
+                  tier?.bg || 'bg-zinc-900'
+                } ${tier?.color || 'text-zinc-400'}`}
+              >
+                {tier?.label || 'New'}
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-zinc-900 rounded-lg p-2.5">
+            <span className="flex items-center gap-1 text-zinc-400">
+              <Languages className="w-3 h-3" />
+              Language
+            </span>
+            <p className="text-zinc-100 font-medium">
+              {u.language || 'en'}
+            </p>
+          </div>
+
+          <div className="bg-zinc-900 rounded-lg p-2.5">
+            <span className="text-zinc-400">
+              Date of Birth
+            </span>
+            <p className="text-zinc-100 font-medium">
+              {u.date_of_birth || u.dob || '-'}
+            </p>
+          </div>
+
+          <div className="bg-zinc-900 rounded-lg p-2.5">
+            <span className="text-zinc-400">
+              Mobile Number
+            </span>
+            <p className="text-zinc-100 font-medium">
+              {u.country_code || ''}
+              {u.mobile
+                ? ` ${u.mobile}`
+                : '-'}
+            </p>
+          </div>
+
+          <div className="bg-zinc-900 rounded-lg p-2.5">
+            <span className="text-zinc-400">
+              Referral Code
+            </span>
+
+            <p className="text-zinc-100 font-medium font-mono text-[11px]">
+              {u.referral_code || '-'}
+            </p>
+
+            <p className="text-zinc-400 text-[10px] mt-0.5">
+              {num(u.referral_count)} referred
+              {num(u.referral_earnings) > 0 &&
+                ` · $${num(
+                  u.referral_earnings
+                )} earned`}
+            </p>
+
+            {u.referred_by && (
+              <p className="text-zinc-400 text-[10px] mt-0.5">
+                From:{' '}
+                {u.referred_by.full_name ||
+                  u.referred_by.email ||
+                  '-'}
+              </p>
+            )}
+          </div>
+
+        </div>
+
+        {/* TOGGLES */}
+        <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-zinc-800">
+
+          <button
+            type="button"
+            onClick={() =>
+              handleToggle('trading_enabled')
+            }
+            disabled={loading}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 ${
+              u.trading_enabled !== false
+                ? 'bg-emerald-500/15 text-emerald-700'
+                : 'bg-zinc-900 text-zinc-400'
+            }`}
+          >
+            {u.trading_enabled !== false ? (
+              <ToggleRight className="w-4 h-4 text-emerald-600" />
+            ) : (
+              <ToggleLeft className="w-4 h-4 text-zinc-400" />
+            )}
+            Trading {u.trading_enabled !== false ? 'ON' : 'OFF'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              handleToggle('withdrawal_enabled')
+            }
+            disabled={loading}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 ${
+              u.withdrawal_enabled !== false
+                ? 'bg-emerald-500/15 text-emerald-700'
+                : 'bg-zinc-900 text-zinc-400'
+            }`}
+          >
+            {u.withdrawal_enabled !== false ? (
+              <ToggleRight className="w-4 h-4 text-emerald-600" />
+            ) : (
+              <ToggleLeft className="w-4 h-4 text-zinc-400" />
+            )}
+            Withdraw {u.withdrawal_enabled !== false ? 'ON' : 'OFF'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              handleToggle('premium_enabled')
+            }
+            disabled={loading}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-50 ${
+              u.premium_enabled
+                ? 'bg-gold-500/10 text-gold-600'
+                : 'bg-zinc-900 text-zinc-400'
+            }`}
+          >
+            <Crown
+              className={`w-4 h-4 ${
+                u.premium_enabled
+                  ? 'text-gold-500'
+                  : 'text-zinc-400'
+              }`}
+            />
+            Premium {u.premium_enabled ? 'ON' : 'OFF'}
+          </button>
+        </div>
+
+        {/* BALANCE ACTIONS */}
+        <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-zinc-800">
+
+          <button
+            type="button"
+            onClick={() => setDepositDialog(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 hover:bg-emerald-500/15 text-emerald-700 transition-colors"
+          >
+            <Banknote className="w-4 h-4" />
+            Add Deposit
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setWithdrawDialog(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-red-500/15 hover:bg-red-500/15 text-red-700 transition-colors"
+          >
+            <Wallet className="w-4 h-4" />
+            Add Withdrawal
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setProfitDialog(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gold-500/10 hover:bg-gold-500/10 text-gold-600 transition-colors"
+          >
+            <HandCoins className="w-4 h-4" />
+            Add Profit
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setBalanceDialog(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-200 transition-colors"
+          >
+            <DollarSign className="w-4 h-4 text-gold-500" />
+            Balance
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setFreezeDialog(true)}
+            disabled={loading || availableBalance <= 0}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gold-500/10 hover:bg-gold-500/10 text-gold-600 transition-colors disabled:opacity-40"
+          >
+            <Snowflake className="w-4 h-4" />
+            Freeze
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setUnfreezeDialog(true)}
+            disabled={loading || frozenBalance <= 0}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-amber-500/15 hover:bg-amber-500/15 text-amber-700 transition-colors disabled:opacity-40"
+          >
+            <Unlock className="w-4 h-4" />
+            Unfreeze
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setCreditDialog(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-200 transition-colors"
+          >
+            <Scale className="w-4 h-4 text-gold-500" />
+            Credit Score
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setLoginPasswordDialog(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-200 transition-colors"
+          >
+            <Lock className="w-4 h-4 text-gold-500" />
+            Login Password
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setWithdrawPasswordDialog(true)}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-200 transition-colors"
+          >
+            <KeyRound className="w-4 h-4 text-amber-500" />
+            Withdrawal Password
+          </button>
+        </div>
+      </div>
+
+      {/* BALANCE DIALOG */}
+      <Dialog
+        open={balanceDialog}
+        onClose={() => {
+          setBalanceDialog(false);
+          setBalanceAmount('');
+        }}
+        title="Adjust Balance"
+      >
+        <div className="space-y-4">
+
+          <div>
+            <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider mb-2 block">
+              Action
+            </label>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setBalanceAction('add')}
+                className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                  balanceAction === 'add'
+                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-600'
+                    : 'bg-zinc-900 border-zinc-800 text-zinc-400'
+                }`}
+              >
+                Add
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setBalanceAction('deduct')}
+                className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                  balanceAction === 'deduct'
+                    ? 'bg-red-500/15 border-red-500/30 text-red-600'
+                    : 'bg-zinc-900 border-zinc-800 text-zinc-400'
+                }`}
+              >
+                Deduct
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-zinc-400 text-xs font-medium uppercase tracking-wider mb-2 block">
+              Amount (USDT)
+            </label>
+
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={balanceAmount}
+              onChange={(e) =>
+                setBalanceAmount(e.target.value)
+              }
+              placeholder="0.00"
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500 focus:border-gold-500"
+            />
+
+            {balanceAction === 'deduct' && (
+              <p className="text-zinc-400 text-[11px] mt-1">
+                Available balance:{' '}
+                {formatCurrency(availableBalance)}
+              </p>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleBalance}
+            disabled={loading || !balanceAmount}
+            className="w-full py-2.5 rounded-lg text-sm font-semibold bg-gold-600 hover:bg-gold-700 text-white transition-colors disabled:opacity-50"
+          >
+            {loading ? 'Processing...' : 'Confirm'}
+          </button>
+        </div>
+      </Dialog>
+
+      {/* FREEZE */}
+      <Dialog
+        open={freezeDialog}
+        onClose={() => {
+          setFreezeDialog(false);
+          setFreezeAmount('');
+        }}
+        title="Freeze User Balance"
+      >
+        <div className="space-y-4">
+
+          <div className="bg-gold-500/10 border border-gold-500/30 rounded-xl p-4">
+            <div className="flex items-start gap-3">
+              <Snowflake className="w-5 h-5 text-gold-500 flex-shrink-0" />
+
+              <div>
+                <p className="text-gold-600 text-sm font-semibold">
+                  Freeze Amount
+                </p>
+
+                <p className="text-gold-500 text-xs mt-1">
+                  Frozen funds remain in total balance but cannot be used for trading or withdrawal.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="bg-zinc-900 rounded-lg p-3">
+              <p className="text-zinc-400 text-[10px] uppercase">
+                Total Balance
+              </p>
+              <p className="text-zinc-50 font-semibold text-sm mt-1">
+                {formatCurrency(totalBalance)}
+              </p>
+            </div>
+
+            <div className="bg-emerald-500/15 rounded-lg p-3">
+              <p className="text-emerald-600 text-[10px] uppercase">
+                Available
+              </p>
+              <p className="text-emerald-700 font-semibold text-sm mt-1">
+                {formatCurrency(availableBalance)}
+              </p>
+            </div>
+          </div>
+
+          <input
+            type="number"
+            min="0"
+            max={availableBalance}
+            step="0.01"
+            value={freezeAmount}
+            onChange={(e) =>
+              setFreezeAmount(e.target.value)
+            }
+            placeholder="Freeze amount"
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500"
+          />
+
+          <p className="text-zinc-400 text-[11px]">
+            Maximum: {formatCurrency(availableBalance)}
+          </p>
+
+          <button
+            type="button"
+            onClick={handleFreeze}
+            disabled={loading || !freezeAmount}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold bg-gold-600 hover:bg-gold-700 text-white disabled:opacity-50"
+          >
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Snowflake className="w-4 h-4" />
+            )}
+            {loading ? 'Freezing...' : 'Freeze Amount'}
+          </button>
+        </div>
+      </Dialog>
+
+      {/* UNFREEZE */}
+      <Dialog
+        open={unfreezeDialog}
+        onClose={() => {
+          setUnfreezeDialog(false);
+          setUnfreezeAmount('');
+        }}
+        title="Unfreeze User Balance"
+      >
+        <div className="space-y-4">
+
+          <div className="bg-amber-500/15 border border-amber-500/25 rounded-xl p-4">
+            <div className="flex items-start gap-3">
+              <Unlock className="w-5 h-5 text-amber-500 flex-shrink-0" />
+
+              <div>
+                <p className="text-amber-700 text-sm font-semibold">
+                  Unfreeze Amount
+                </p>
+
+                <p className="text-amber-600 text-xs mt-1">
+                  Unfreezing makes the selected amount available again.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-gold-500/10 rounded-lg p-3">
+            <p className="text-gold-500 text-[10px] uppercase">
+              Currently Frozen
+            </p>
+
+            <p className="text-gold-600 font-semibold text-lg mt-1">
+              {formatCurrency(frozenBalance)}
+            </p>
+          </div>
+
+          <input
+            type="number"
+            min="0"
+            max={frozenBalance}
+            step="0.01"
+            value={unfreezeAmount}
+            onChange={(e) =>
+              setUnfreezeAmount(e.target.value)
+            }
+            placeholder="Unfreeze amount"
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+          />
+
+          <p className="text-zinc-400 text-[11px]">
+            Maximum: {formatCurrency(frozenBalance)}
+          </p>
+
+          <button
+            type="button"
+            onClick={handleUnfreeze}
+            disabled={loading || !unfreezeAmount}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50"
+          >
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Unlock className="w-4 h-4" />
+            )}
+            {loading ? 'Unfreezing...' : 'Unfreeze Amount'}
+          </button>
+        </div>
+      </Dialog>
+
+      {/* LOGIN PASSWORD */}
+      <Dialog
+        open={loginPasswordDialog}
+        onClose={() => {
+          setLoginPasswordDialog(false);
+          setNewPassword('');
+        }}
+        title="Set Login Password"
+      >
+        <div className="space-y-4">
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) =>
+              setNewPassword(e.target.value)
+            }
+            placeholder="Enter new login password"
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500"
+          />
+
+          <button
+            type="button"
+            onClick={handleLoginPassword}
+            disabled={loading || !newPassword}
+            className="w-full py-2.5 rounded-lg text-sm font-semibold bg-gold-600 text-white disabled:opacity-50"
+          >
+            {loading ? 'Setting...' : 'Set Login Password'}
+          </button>
+        </div>
+      </Dialog>
+
+      {/* WITHDRAWAL PASSWORD */}
+      <Dialog
+        open={withdrawPasswordDialog}
+        onClose={() => {
+          setWithdrawPasswordDialog(false);
+          setWithdrawPassword('');
+        }}
+        title="Set Withdrawal Password"
+      >
+        <div className="space-y-4">
+          <input
+            type="password"
+            value={withdrawPassword}
+            onChange={(e) =>
+              setWithdrawPassword(e.target.value)
+            }
+            placeholder="Enter new withdrawal password"
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500"
+          />
+
+          <button
+            type="button"
+            onClick={handleWithdrawPassword}
+            disabled={loading || !withdrawPassword}
+            className="w-full py-2.5 rounded-lg text-sm font-semibold bg-gold-600 text-white disabled:opacity-50"
+          >
+            {loading
+              ? 'Setting...'
+              : 'Set Withdrawal Password'}
+          </button>
+        </div>
+      </Dialog>
+
+      {/* CREDIT SCORE */}
+      <Dialog
+        open={creditDialog}
+        onClose={() => {
+          setCreditDialog(false);
+          setCreditScore('');
+        }}
+        title="Set Credit Score"
+      >
+        <div className="space-y-4">
+
+          <input
+            type="number"
+            min="0"
+            value={creditScore}
+            onChange={(e) =>
+              setCreditScore(e.target.value)
+            }
+            placeholder="100"
+            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500"
+          />
+
+          <div className="bg-zinc-900 rounded-lg p-3">
+            <p className="text-zinc-400 text-xs mb-2">
+              Tier Thresholds
+            </p>
+
+            <div className="space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-gold-500">Platinum</span>
+                <span className="text-zinc-400">≥ 800</span>
+              </div>
+
+              <div className="flex justify-between">
+                <span className="text-gold-500">VIP</span>
+                <span className="text-zinc-400">≥ 600</span>
+              </div>
+
+              <div className="flex justify-between">
+                <span className="text-emerald-600">Trusted</span>
+                <span className="text-zinc-400">≥ 400</span>
+              </div>
+
+              <div className="flex justify-between">
+                <span className="text-gold-500">Regular</span>
+                <span className="text-zinc-400">≥ 200</span>
+              </div>
+
+              <div className="flex justify-between">
+                <span className="text-zinc-400">New</span>
+                <span className="text-zinc-400">&lt; 200</span>
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleCredit}
+            disabled={loading || creditScore === ''}
+            className="w-full py-2.5 rounded-lg text-sm font-semibold bg-gold-600 text-white disabled:opacity-50"
+          >
+            {loading ? 'Updating...' : 'Set Credit Score'}
+          </button>
+        </div>
+      </Dialog>
+
+      {/* DEPOSIT */}
+      {depositDialog && (
+        <AmountDialog
+          title="Add to Total Deposited"
+          label="Amount (USDT)"
+          icon={Banknote}
+          actionLabel="Add Deposit"
+          onClose={() => setDepositDialog(false)}
+          onSubmit={async (amount) => {
+            await api.post(
+              `/users/${userId}/add-deposit`,
+              { amount }
+            );
+
+            setDepositDialog(false);
+            await onRefresh();
+          }}
+        />
+      )}
+
+      {/* WITHDRAWAL */}
+      {withdrawDialog && (
+        <AmountDialog
+          title="Add to Total Withdrawn"
+          label="Amount (USDT)"
+          icon={Wallet}
+          actionLabel="Add Withdrawal"
+          onClose={() => setWithdrawDialog(false)}
+          onSubmit={async (amount) => {
+            await api.post(
+              `/users/${userId}/add-withdrawal`,
+              { amount }
+            );
+
+            setWithdrawDialog(false);
+            await onRefresh();
+          }}
+        />
+      )}
+
+      {/* PROFIT */}
+      {profitDialog && (
+        <AmountDialog
+          title="Add to Total Profit"
+          label="Amount (USDT)"
+          icon={HandCoins}
+          actionLabel="Add Profit"
+          onClose={() => setProfitDialog(false)}
+          onSubmit={async (amount) => {
+            await api.post(
+              `/users/${userId}/add-profit`,
+              { amount }
+            );
+
+            setProfitDialog(false);
+            await onRefresh();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+/* =========================================================
+   VERIFY TAB
+========================================================= */
+
+function VerifyTab({
+  onRefresh,
+}) {
+  const [subTab, setSubTab] = useState('pending');
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [actionId, setActionId] = useState(null);
+
+  const counts = {
+    pending: users.filter(
+      (u) => u.identity_status === 'pending'
+    ).length,
+
+    rejected: users.filter(
+      (u) =>
+        u.identity_status === 'rejected'
+    ).length,
+
+    all: users.length,
+  };
+
+  const fetchUsers = useCallback(async () => {
+    setLoading(true);
+
+    try {
+      const { data } =
+        await api.get('/admin/users');
+
+      setUsers(
+        asArray(data, ['users', 'data'])
+      );
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  async function handleVerify(id, status) {
+    if (!id) return;
+
+    setActionId(id);
+
+    try {
+      await api.post(
+        `/users/${id}/verify`,
+        { status }
+      );
+
+      await fetchUsers();
+      await onRefresh();
+    } catch (err) {
+      console.error(err);
+
+      alert(
+        getApiError(
+          err,
+          'Verification action failed.'
+        )
+      );
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  const filtered = users.filter((u) => {
+    if (subTab === 'pending') {
+      return u.identity_status === 'pending';
+    }
+
+    if (subTab === 'rejected') {
+      return u.identity_status === 'rejected';
+    }
+
+    return true;
+  });
+
+  return (
+    <div className="space-y-4">
+
+      <div className="flex gap-2 flex-wrap">
+        {[
+          'pending',
+          'rejected',
+          'all',
+        ].map((tab) => (
+          <button
+            type="button"
+            key={tab}
+            onClick={() => setSubTab(tab)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
+              subTab === tab
+                ? 'bg-gold-500/10 text-gold-500 border border-gold-500/40'
+                : 'bg-zinc-900 text-zinc-400 hover:text-zinc-300 border border-transparent'
+            }`}
+          >
+            {tab} ({counts[tab]})
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <div className="w-8 h-8 border-4 border-gold-500/40 border-t-gold-500 rounded-full animate-spin" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-12">
+          <BadgeCheck className="w-12 h-12 text-zinc-500 mx-auto mb-3" />
+
+          <p className="text-zinc-400 text-sm">
+            No verification requests
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((u) => {
+            const id = getId(u);
+            const busy = actionId === id;
+
+            return (
+              <div
+                key={id}
+                className="bg-zinc-900 rounded-xl shadow-sm border border-gold-500/30 p-4"
+              >
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-zinc-50 font-semibold text-sm">
+                        {u.full_name || 'Unknown User'}
+                      </p>
+
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          u.identity_status === 'verified'
+                            ? 'bg-emerald-500/15 text-emerald-600'
+                            : u.identity_status === 'pending'
+                            ? 'bg-amber-500/15 text-amber-600'
+                            : 'bg-red-500/15 text-red-600'
+                        }`}
+                      >
+                        {u.identity_status || 'unverified'}
+                      </span>
+                    </div>
+
+                    <p className="text-zinc-400 text-xs">
+                      {u.email || '-'}
+                    </p>
+
+                    {(u.dob || u.date_of_birth) && (
+                      <p className="text-zinc-400 text-xs">
+                        DOB: {u.dob || u.date_of_birth}
+                      </p>
+                    )}
+
+                    {u.mobile && (
+                      <p className="text-zinc-400 text-xs">
+                        Mobile: {u.mobile}
+                      </p>
+                    )}
+
+                    {u.identity_submitted_at && (
+                      <p className="text-zinc-400 text-[11px]">
+                        Submitted:{' '}
+                        {formatDate(
+                          u.identity_submitted_at
+                        )}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        handleVerify(id, 'verified')
+                      }
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/15 disabled:opacity-50"
+                    >
+                      {busy ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <CheckCircle className="w-3.5 h-3.5" />
+                      )}
+                      Verify
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        handleVerify(id, 'rejected')
+                      }
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/15 text-red-600 hover:bg-red-500/15 disabled:opacity-50"
+                    >
+                      {busy ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <XCircle className="w-3.5 h-3.5" />
+                      )}
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* =========================================================
+   TRANSACTIONS TAB
+========================================================= */
+
+function TransactionsTab() {
+  const [subTab, setSubTab] = useState('pending');
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [actionId, setActionId] = useState(null);
+
+  const fetchTransactions = useCallback(async () => {
+    setLoading(true);
+
+    try {
+      const { data } =
+        await api.get('/transactions/all');
+
+      setTransactions(
+        asArray(data, [
+          'transactions',
+          'data',
+        ])
+      );
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTransactions();
+  }, [fetchTransactions]);
+
+  const counts = {
+    pending: transactions.filter(
+      (t) => t.status === 'pending'
+    ).length,
+
+    completed: transactions.filter(
+      (t) =>
+        t.status === 'completed' ||
+        t.status === 'approved'
+    ).length,
+
+    rejected: transactions.filter(
+      (t) => t.status === 'rejected'
+    ).length,
+  };
+
+  async function handleApprove(id) {
+    if (!id) return;
+
+    setActionId(id);
+
+    try {
+      await api.post(
+        `/transactions/${id}/approve`
+      );
+
+      await fetchTransactions();
+    } catch (err) {
+      console.error(err);
+
+      alert(
+        getApiError(
+          err,
+          'Approval failed.'
+        )
+      );
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  async function handleReject(id) {
+    if (!id) return;
+
+    setActionId(id);
+
+    try {
+      await api.post(
+        `/transactions/${id}/reject`
+      );
+
+      await fetchTransactions();
+    } catch (err) {
+      console.error(err);
+
+      alert(
+        getApiError(
+          err,
+          'Reject failed.'
+        )
+      );
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  const filtered = transactions.filter((t) => {
+    if (subTab === 'pending') {
+      return t.status === 'pending';
+    }
+
+    if (subTab === 'completed') {
+      return (
+        t.status === 'completed' ||
+        t.status === 'approved'
+      );
+    }
+
+    return t.status === 'rejected';
+  });
+
+  return (
+    <div className="space-y-4">
+
+      <div className="flex gap-2 flex-wrap">
+        <button
+          type="button"
+          onClick={() => setSubTab('pending')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium ${
+            subTab === 'pending'
+              ? 'bg-gold-500/10 text-gold-500 border border-gold-500/40'
+              : 'bg-zinc-900 text-zinc-400'
+          }`}
+        >
+          Pending ({counts.pending})
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSubTab('completed')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium ${
+            subTab === 'completed'
+              ? 'bg-gold-500/10 text-gold-500 border border-gold-500/40'
+              : 'bg-zinc-900 text-zinc-400'
+          }`}
+        >
+          Completed ({counts.completed})
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSubTab('rejected')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium ${
+            subTab === 'rejected'
+              ? 'bg-gold-500/10 text-gold-500 border border-gold-500/40'
+              : 'bg-zinc-900 text-zinc-400'
+          }`}
+        >
+          Rejected ({counts.rejected})
+        </button>
+
+        <button
+          type="button"
+          onClick={fetchTransactions}
+          disabled={loading}
+          className="ml-auto flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium bg-zinc-900 text-zinc-400 hover:bg-zinc-800 disabled:opacity-50"
+        >
+          <RefreshCw
+            className={`w-3.5 h-3.5 ${
+              loading ? 'animate-spin' : ''
+            }`}
+          />
+          Refresh
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <div className="w-8 h-8 border-4 border-gold-500/40 border-t-gold-500 rounded-full animate-spin" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-12">
+          <FileText className="w-12 h-12 text-zinc-500 mx-auto mb-3" />
+
+          <p className="text-zinc-400 text-sm">
+            No {subTab} transactions
+          </p>
+        </div>
+      ) : (
+        <div className="bg-zinc-900 rounded-xl shadow-sm border border-gold-500/30 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-800">
+                  <th className="text-left p-3 text-zinc-400 text-xs uppercase">
+                    User
+                  </th>
+                  <th className="text-left p-3 text-zinc-400 text-xs uppercase">
+                    Type
+                  </th>
+                  <th className="text-left p-3 text-zinc-400 text-xs uppercase">
+                    Amount
+                  </th>
+                  <th className="text-left p-3 text-zinc-400 text-xs uppercase">
+                    Method
+                  </th>
+                  <th className="text-left p-3 text-zinc-400 text-xs uppercase">
+                    Status
+                  </th>
+                  <th className="text-left p-3 text-zinc-400 text-xs uppercase">
+                    Date
+                  </th>
+                  <th className="text-right p-3 text-zinc-400 text-xs uppercase">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-zinc-900">
+                {filtered.map((t) => {
+                  const id = getId(t);
+                  const busy = actionId === id;
+
+                  return (
+                    <tr
+                      key={id}
+                      className="hover:bg-zinc-900"
+                    >
+                      <td className="p-3 text-zinc-100 text-xs">
+                        {t.user?.full_name ||
+                          t.user_name ||
+                          t.user_email ||
+                          'Unknown'}
+                      </td>
+
+                      <td className="p-3">
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                            t.type === 'deposit'
+                              ? 'bg-emerald-500/15 text-emerald-600'
+                              : 'bg-red-500/15 text-red-600'
+                          }`}
+                        >
+                          {t.type || '-'}
+                        </span>
+                      </td>
+
+                      <td className="p-3 text-zinc-100 text-xs font-medium">
+                        {formatCurrency(num(t.amount))}
+                      </td>
+
+                      <td className="p-3">
+                        <p className="text-zinc-400 text-xs">
+                          {t.method || '-'}
+                        </p>
+
+                        {t.tx_hash && (
+                          <p className="text-[10px] text-zinc-500 font-mono mt-0.5">
+                            Ref: {t.tx_hash}
+                          </p>
+                        )}
+                      </td>
+
+                      <td className="p-3">
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                            t.status === 'pending'
+                              ? 'bg-amber-500/15 text-amber-600'
+                              : t.status === 'rejected'
+                              ? 'bg-red-500/15 text-red-600'
+                              : 'bg-emerald-500/15 text-emerald-600'
+                          }`}
+                        >
+                          {t.status || '-'}
+                        </span>
+                      </td>
+
+                      <td className="p-3 text-zinc-400 text-xs">
+                        {t.createdAt
+                          ? formatDate(t.createdAt)
+                          : t.created_at
+                          ? formatDate(t.created_at)
+                          : '-'}
+                      </td>
+
+                      <td className="p-3 text-right">
+                        {t.status === 'pending' && (
+                          <div className="flex gap-1.5 justify-end">
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                handleApprove(id)
+                              }
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/15 disabled:opacity-50"
+                            >
+                              {busy ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Check className="w-3 h-3" />
+                              )}
+                              Approve
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() =>
+                                handleReject(id)
+                              }
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium bg-red-500/15 text-red-600 hover:bg-red-500/15 disabled:opacity-50"
+                            >
+                              <X className="w-3 h-3" />
+                              Reject
+                            </button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* =========================================================
+   TRADE DATA TAB
+========================================================= */
+
+function TradeDataTab() {
+  const [trades, setTrades] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [savingId, setSavingId] = useState(null);
+  const [filter, setFilter] = useState('all');
+  const [query, setQuery] = useState('');
+
+  const fetchTrades = useCallback(async () => {
+    setLoading(true);
+
+    try {
+      const { data } =
+        await api.get('/admin/trades');
+
+      setTrades(
+        asArray(data, ['trades', 'data'])
+      );
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTrades();
+  }, [fetchTrades]);
+
+  async function handleOutcome(id, outcome) {
+    if (!id) return;
+
+    setSavingId(id);
+
+    try {
+      await api.post(
+        `/trades/${id}/admin-outcome`,
+        { outcome }
+      );
+
+      await fetchTrades();
+    } catch (err) {
+      console.error(err);
+
+      alert(
+        getApiError(
+          err,
+          'Trade update failed.'
+        )
+      );
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  const counts = {
+    all: trades.length,
+    active: trades.filter(
+      (t) => t.status === 'active'
+    ).length,
+    won: trades.filter(
+      (t) => t.status === 'won'
+    ).length,
+    lost: trades.filter(
+      (t) => t.status === 'lost'
+    ).length,
+  };
+
+  const totalVolume = trades.reduce(
+    (sum, t) =>
+      sum + num(t.amount),
+    0
+  );
+
+  const totalPL = trades.reduce(
+    (sum, t) =>
+      sum + num(t.profit_loss),
+    0
+  );
+
+  const filtered = trades.filter((t) => {
+    if (
+      filter !== 'all' &&
+      t.status !== filter
+    ) {
+      return false;
+    }
+
+    if (query.trim()) {
+      const q = query.toLowerCase();
+
+      const name =
+        t.user_id?.full_name ||
+        t.user?.full_name ||
+        '';
+
+      const email =
+        t.user_email ||
+        t.user?.email ||
+        '';
+
+      if (
+        !String(name)
+          .toLowerCase()
+          .includes(q) &&
+        !String(email)
+          .toLowerCase()
+          .includes(q)
+      ) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  function statusBadge(status) {
+    const map = {
+      active: 'bg-gold-500/10 text-gold-500',
+      won: 'bg-emerald-500/15 text-emerald-600',
+      lost: 'bg-red-500/15 text-red-600',
+    };
+
+    return (
+      <span
+        className={`px-1.5 py-0.5 rounded text-[10px] font-medium capitalize ${
+          map[status] ||
+          'bg-zinc-900 text-zinc-400'
+        }`}
+      >
+        {status || 'unknown'}
+      </span>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="bg-zinc-900 rounded-xl shadow-sm border border-gold-500/30 p-3">
+          <p className="text-zinc-400 text-[10px] uppercase">
+            Total Trades
+          </p>
+          <p className="text-zinc-50 font-semibold text-xl">
+            {trades.length}
+          </p>
+        </div>
+
+        <div className="bg-zinc-900 rounded-xl shadow-sm border border-gold-500/30 p-3">
+          <p className="text-zinc-400 text-[10px] uppercase">
+            Total Volume
+          </p>
+          <p className="text-zinc-50 font-semibold text-xl">
+            {formatCurrency(totalVolume)}
+          </p>
+        </div>
+
+        <div className="bg-zinc-900 rounded-xl shadow-sm border border-gold-500/30 p-3">
+          <p className="text-zinc-400 text-[10px] uppercase">
+            Total P/L
+          </p>
+
+          <p
+            className={`font-semibold text-xl ${
+              totalPL >= 0
+                ? 'text-emerald-600'
+                : 'text-red-600'
+            }`}
+          >
+            {totalPL >= 0 ? '+' : '-'}
+            {formatCurrency(Math.abs(totalPL))}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 flex-wrap">
+        {[
+          'all',
+          'active',
+          'won',
+          'lost',
+        ].map((f) => (
+          <button
+            type="button"
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium capitalize ${
+              filter === f
+                ? 'bg-gold-500/10 text-gold-500 border border-gold-500/40'
+                : 'bg-zinc-900 text-zinc-400'
+            }`}
+          >
+            {f} ({counts[f]})
+          </button>
+        ))}
+
+        <button
+          type="button"
+          onClick={fetchTrades}
+          disabled={loading}
+          className="ml-auto flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs bg-zinc-900 text-zinc-400 hover:bg-zinc-800 disabled:opacity-50"
+        >
+          <RefreshCw
+            className={`w-3.5 h-3.5 ${
+              loading ? 'animate-spin' : ''
+            }`}
+          />
+          Refresh
+        </button>
+      </div>
+
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+
+        <input
+          type="text"
+          value={query}
+          onChange={(e) =>
+            setQuery(e.target.value)
+          }
+          placeholder="Search by user email or name..."
+          className="w-full bg-zinc-900 border border-gold-500/30 rounded-lg pl-10 pr-4 py-2.5 text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500 shadow-sm"
+        />
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <div className="w-8 h-8 border-4 border-gold-500/40 border-t-gold-500 rounded-full animate-spin" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-12">
+          <Database className="w-12 h-12 text-zinc-500 mx-auto mb-3" />
+          <p className="text-zinc-400 text-sm">
+            No trades found
+          </p>
+        </div>
+      ) : (
+        <div className="bg-zinc-900 rounded-xl shadow-sm border border-gold-500/30 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm whitespace-nowrap">
+              <thead>
+                <tr className="border-b border-zinc-800">
+                  {[
+                    'Date',
+                    'User',
+                    'Crypto',
+                    'Direction',
+                    'Amount',
+                    'Entry',
+                    'Exit',
+                    'Duration',
+                    'Profit %',
+                    'P/L',
+                    'Status',
+                    'Control',
+                  ].map((heading) => (
+                    <th
+                      key={heading}
+                      className="text-left p-3 text-zinc-400 text-xs uppercase tracking-wider"
+                    >
+                      {heading}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-zinc-900">
+                {filtered.map((t) => {
+                  const id = getId(t);
+                  const isWon =
+                    t.status === 'won';
+                  const isLost =
+                    t.status === 'lost';
+                  const busy =
+                    savingId === id;
+
+                  return (
+                    <tr
+                      key={id}
+                      className="hover:bg-zinc-900"
+                    >
+                      <td className="p-3 text-zinc-400 text-xs">
+                        {t.createdAt
+                          ? formatDate(t.createdAt)
+                          : '-'}
+                      </td>
+
+                      <td className="p-3">
+                        <p className="text-zinc-100 text-xs font-medium">
+                          {t.user_id?.full_name ||
+                            t.user?.full_name ||
+                            'Unknown'}
+                        </p>
+
+                        <p className="text-zinc-400 text-[11px]">
+                          {t.user_email ||
+                            t.user?.email ||
+                            '-'}
+                        </p>
+                      </td>
+
+                      <td className="p-3 text-zinc-100 text-xs font-semibold">
+                        {t.crypto || '-'}
+                      </td>
+
+                      <td className="p-3">
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                            t.direction === 'buy'
+                              ? 'bg-emerald-500/15 text-emerald-600'
+                              : 'bg-red-500/15 text-red-600'
+                          }`}
+                        >
+                          {String(
+                            t.direction || 'buy'
+                          ).toUpperCase()}
+                        </span>
+                      </td>
+
+                      <td className="p-3 text-zinc-100 text-xs font-medium">
+                        {formatCurrency(num(t.amount))}
+                      </td>
+
+                      <td className="p-3 text-zinc-100 text-xs">
+                        {num(t.entry_price) > 0
+                          ? formatCurrency(
+                              num(t.entry_price)
+                            )
+                          : '-'}
+                      </td>
+
+                      <td className="p-3 text-zinc-100 text-xs">
+                        {num(t.exit_price) > 0
+                          ? formatCurrency(
+                              num(t.exit_price)
+                            )
+                          : '-'}
+                      </td>
+
+                      <td className="p-3 text-zinc-100 text-xs">
+                        {num(t.duration) > 0
+                          ? `${num(t.duration)}s`
+                          : '-'}
+                      </td>
+
+                      <td className="p-3 text-zinc-100 text-xs">
+                        {t.profit_percent !==
+                          undefined &&
+                        t.profit_percent !==
+                          null
+                          ? `${t.profit_percent}%`
+                          : '-'}
+                      </td>
+
+                      <td className="p-3">
+                        <p
+                          className={`text-xs font-semibold ${
+                            num(t.profit_loss) >= 0
+                              ? 'text-emerald-600'
+                              : 'text-red-600'
+                          }`}
+                        >
+                          {num(t.profit_loss) >= 0
+                            ? '+'
+                            : ''}
+                          {formatCurrency(
+                            num(t.profit_loss)
+                          )}
+                        </p>
+                      </td>
+
+                      <td className="p-3">
+                        {statusBadge(t.status)}
+                      </td>
+
+                      <td className="p-3 text-right">
+                        <div className="flex gap-1.5 justify-end">
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              handleOutcome(
+                                id,
+                                'won'
+                              )
+                            }
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-medium disabled:opacity-50 ${
+                              isWon
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/15'
+                            }`}
+                          >
+                            Won
+                          </button>
+
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              handleOutcome(
+                                id,
+                                'lost'
+                              )
+                            }
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-medium disabled:opacity-50 ${
+                              isLost
+                                ? 'bg-red-600 text-white'
+                                : 'bg-red-500/15 text-red-600 hover:bg-red-500/15'
+                            }`}
+                          >
+                            Lost
+                          </button>
+                        </div>
+
+                        {t.admin_outcome && (
+                          <p className="text-[10px] text-zinc-400 mt-1">
+                            Admin: {t.admin_outcome}
+                          </p>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* =========================================================
+   NOTIFICATIONS TAB
+========================================================= */
+
+function NotificationsTab({
+  users = [],
+}) {
+  const safeUsers = Array.isArray(users)
+    ? users
+    : [];
+
+  const [recipient, setRecipient] =
+    useState('all');
+
+  const [selectedUser, setSelectedUser] =
+    useState('');
+
+  const [title, setTitle] =
+    useState('');
+
+  const [message, setMessage] =
+    useState('');
+
+  const [type, setType] =
+    useState('general');
+
+  const [sending, setSending] =
+    useState(false);
+
+  const [msg, setMsg] =
+    useState('');
+
+  const [error, setError] =
+    useState('');
+
+  const [searchUser, setSearchUser] =
+    useState('');
+
+  const filteredUsers =
+    safeUsers.filter((u) => {
+      if (!searchUser.trim()) return true;
+
+      const q = searchUser.toLowerCase();
+
+      return (
+        String(u.full_name || '')
+          .toLowerCase()
+          .includes(q) ||
+        String(u.email || '')
+          .toLowerCase()
+          .includes(q) ||
+        String(u.mobile || '')
+          .includes(q)
+      );
+    });
+
+  const typeOptions = [
+    {
+      value: 'general',
+      label: 'General',
+      icon: MessageSquare,
+    },
+    {
+      value: 'announcement',
+      label: 'Announcement',
+      icon: Megaphone,
+    },
+    {
+      value: 'deposit',
+      label: 'Deposit',
+      icon: Banknote,
+    },
+    {
+      value: 'withdrawal',
+      label: 'Withdrawal',
+      icon: Wallet,
+    },
+    {
+      value: 'trade',
+      label: 'Trade',
+      icon: TrendingUp,
+    },
+    {
+      value: 'security',
+      label: 'Security',
+      icon: ShieldAlert,
+    },
+  ];
+
+  function resetForm() {
+    setRecipient('all');
+    setSelectedUser('');
+    setTitle('');
+    setMessage('');
+    setType('general');
+    setSearchUser('');
+  }
+
+  async function handleSend() {
+    setMsg('');
+    setError('');
+
+    if (!title.trim()) {
+      setError('Please enter notification title.');
+      return;
+    }
+
+    if (!message.trim()) {
+      setError('Please enter notification message.');
+      return;
+    }
+
+    if (
+      recipient === 'user' &&
+      !selectedUser
+    ) {
+      setError('Please select a user.');
+      return;
+    }
+
+    setSending(true);
+
+    try {
+      const payload = {
+        title: title.trim(),
+        message: message.trim(),
+        type,
+        recipient_type: recipient,
+      };
+
+      if (recipient === 'user') {
+        payload.user_id = selectedUser;
+      }
+
+      const response =
+        await api.post(
+          '/notifications/admin/send',
+          payload
+        );
+
+      const sentCount =
+        response?.data?.count ??
+        response?.data?.sent ??
+        response?.data?.recipients ??
+        null;
+
+      setMsg(
+        sentCount !== null
+          ? `Notification sent successfully to ${sentCount} user${
+              sentCount === 1 ? '' : 's'
+            }.`
+          : recipient === 'all'
+          ? 'Notification sent successfully to all users.'
+          : 'Notification sent successfully.'
+      );
+
+      resetForm();
+    } catch (err) {
+      console.error(err);
+
+      setError(
+        getApiError(
+          err,
+          'Failed to send notification.'
+        )
+      );
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const selectedUserData =
+    safeUsers.find(
+      (u) =>
+        String(getId(u)) ===
+        String(selectedUser)
+    );
+
+  return (
+    <div className="space-y-4">
+
+      <div className="bg-zinc-900 rounded-xl shadow-sm border border-gold-500/30 p-5">
+        <div className="flex items-start gap-3">
+          <div className="w-11 h-11 rounded-xl bg-gold-500/10 flex items-center justify-center">
+            <Bell className="w-5 h-5 text-gold-500" />
+          </div>
+
+          <div>
+            <h3 className="text-zinc-50 font-semibold">
+              Send Notification
+            </h3>
+
+            <p className="text-zinc-400 text-xs mt-1">
+              Send an in-app notification to one user or all registered users.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {msg && (
+        <div className="flex items-start gap-3 bg-emerald-500/15 border border-emerald-500/30 rounded-xl p-4">
+          <CheckCircle className="w-5 h-5 text-emerald-600" />
+
+          <div className="flex-1">
+            <p className="text-emerald-700 text-sm font-semibold">
+              Success
+            </p>
+
+            <p className="text-emerald-600 text-xs mt-0.5">
+              {msg}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setMsg('')}
+            className="text-emerald-500"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {error && (
+        <div className="flex items-start gap-3 bg-red-500/15 border border-red-500/30 rounded-xl p-4">
+          <AlertTriangle className="w-5 h-5 text-red-600" />
+
+          <div className="flex-1">
+            <p className="text-red-700 text-sm font-semibold">
+              Error
+            </p>
+
+            <p className="text-red-600 text-xs mt-0.5">
+              {error}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setError('')}
+            className="text-red-500"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        {/* FORM */}
+        <div className="bg-zinc-900 rounded-xl shadow-sm border border-gold-500/30 p-5">
+          <div className="space-y-5">
+
+            <div>
+              <label className="text-zinc-400 text-[10px] uppercase mb-2 block">
+                Send To
+              </label>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRecipient('all');
+                    setSelectedUser('');
+                  }}
+                  className={`flex items-center justify-center gap-2 px-3 py-3 rounded-xl border text-sm font-medium ${
+                    recipient === 'all'
+                      ? 'bg-gold-500/10 border-gold-500/40 text-gold-500'
+                      : 'bg-zinc-900 border-zinc-800 text-zinc-400'
+                  }`}
+                >
+                  <Users className="w-4 h-4" />
+                  All Users
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setRecipient('user')
+                  }
+                  className={`flex items-center justify-center gap-2 px-3 py-3 rounded-xl border text-sm font-medium ${
+                    recipient === 'user'
+                      ? 'bg-gold-500/10 border-gold-500/40 text-gold-500'
+                      : 'bg-zinc-900 border-zinc-800 text-zinc-400'
+                  }`}
+                >
+                  <User className="w-4 h-4" />
+                  Specific User
+                </button>
+              </div>
+            </div>
+
+            {recipient === 'user' && (
+              <div>
+                <label className="text-zinc-400 text-[10px] uppercase mb-2 block">
+                  Select User
+                </label>
+
+                <div className="relative mb-2">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+
+                  <input
+                    type="text"
+                    value={searchUser}
+                    onChange={(e) =>
+                      setSearchUser(
+                        e.target.value
+                      )
+                    }
+                    placeholder="Search name, email or mobile..."
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-10 pr-3 py-2.5 text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500"
+                  />
+                </div>
+
+                <div className="relative">
+                  <select
+                    value={selectedUser}
+                    onChange={(e) =>
+                      setSelectedUser(
+                        e.target.value
+                      )
+                    }
+                    className="w-full appearance-none bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 pr-9 text-zinc-100 text-sm"
+                  >
+                    <option value="">
+                      Select user...
+                    </option>
+
+                    {filteredUsers.map((u) => (
+                      <option
+                        key={getId(u)}
+                        value={getId(u)}
+                      >
+                        {u.full_name || 'User'} —{' '}
+                        {u.email || ''}
+                      </option>
+                    ))}
+                  </select>
+
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                </div>
+
+                {selectedUserData && (
+                  <div className="mt-2 bg-gold-500/10 border border-gold-500/30 rounded-lg p-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-gold-600 flex items-center justify-center text-white text-xs font-bold">
+                        {selectedUserData.full_name?.[0]?.toUpperCase() || 'U'}
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="text-zinc-100 text-xs font-semibold truncate">
+                          {selectedUserData.full_name || 'User'}
+                        </p>
+
+                        <p className="text-zinc-400 text-[11px] truncate">
+                          {selectedUserData.email || '-'}
+                        </p>
+                      </div>
+
+                      <UserCheck className="w-4 h-4 text-emerald-500 ml-auto" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div>
+              <label className="text-zinc-400 text-[10px] uppercase mb-2 block">
+                Notification Type
+              </label>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {typeOptions.map((item) => {
+                  const TypeIcon = item.icon;
+
+                  return (
+                    <button
+                      type="button"
+                      key={item.value}
+                      onClick={() =>
+                        setType(item.value)
+                      }
+                      className={`flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-lg border text-xs font-medium ${
+                        type === item.value
+                          ? 'bg-gold-500/10 border-gold-500/40 text-gold-500'
+                          : 'bg-zinc-900 border-zinc-800 text-zinc-400'
+                      }`}
+                    >
+                      <TypeIcon className="w-3.5 h-3.5" />
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <div className="flex justify-between mb-2">
+                <label className="text-zinc-400 text-[10px] uppercase">
+                  Title
+                </label>
+
+                <span className="text-[10px] text-zinc-400">
+                  {title.length}/100
+                </span>
+              </div>
+
+              <input
+                type="text"
+                maxLength={100}
+                value={title}
+                onChange={(e) =>
+                  setTitle(e.target.value)
+                }
+                placeholder="Notification title"
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-zinc-100 text-sm"
+              />
+            </div>
+
+            <div>
+              <div className="flex justify-between mb-2">
+                <label className="text-zinc-400 text-[10px] uppercase">
+                  Message
+                </label>
+
+                <span className="text-[10px] text-zinc-400">
+                  {message.length}/1000
+                </span>
+              </div>
+
+              <textarea
+                maxLength={1000}
+                rows={6}
+                value={message}
+                onChange={(e) =>
+                  setMessage(e.target.value)
+                }
+                placeholder="Write your notification message..."
+                className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2.5 text-zinc-100 text-sm resize-none"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={
+                sending ||
+                !title.trim() ||
+                !message.trim() ||
+                (recipient === 'user' &&
+                  !selectedUser)
+              }
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold bg-gold-600 hover:bg-gold-700 text-white disabled:opacity-50"
+            >
+              {sending ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  Send Notification
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* PREVIEW */}
+        <div className="bg-zinc-900 rounded-xl shadow-sm border border-gold-500/30 p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Eye className="w-4 h-4 text-gold-500" />
+            <h4 className="text-zinc-50 text-sm font-semibold">
+              Notification Preview
+            </h4>
+          </div>
+
+          <div className="bg-zinc-900 rounded-2xl p-4 min-h-[280px]">
+            <div className="bg-zinc-900 rounded-xl border border-zinc-800 shadow-sm p-4">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gold-500/10 flex items-center justify-center">
+                  <Bell className="w-5 h-5 text-gold-500" />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-zinc-50 text-sm font-semibold truncate">
+                      {title || 'Notification Title'}
+                    </p>
+
+                    <span className="text-[10px] text-zinc-400">
+                      Now
+                    </span>
+                  </div>
+
+                  <p className="text-zinc-400 text-xs mt-1 capitalize">
+                    {type}
+                  </p>
+
+                  <p className="text-zinc-300 text-sm mt-3 whitespace-pre-wrap break-words">
+                    {message ||
+                      'Your notification message will appear here.'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center gap-2 text-[11px] text-zinc-400">
+              {recipient === 'all' ? (
+                <>
+                  <Users className="w-3.5 h-3.5" />
+                  This notification will be sent to all users.
+                </>
+              ) : (
+                <>
+                  <User className="w-3.5 h-3.5" />
+                  This notification will be sent to{' '}
+                  {selectedUserData?.full_name ||
+                    'selected user'}.
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <div className="bg-gold-500/10 rounded-lg p-3">
+              <p className="text-gold-500 text-[10px] uppercase">
+                Recipient
+              </p>
+
+              <p className="text-zinc-100 text-xs font-semibold mt-1">
+                {recipient === 'all'
+                  ? `All Users (${safeUsers.length})`
+                  : selectedUserData?.full_name ||
+                    'Not selected'}
+              </p>
+            </div>
+
+            <div className="bg-zinc-900 rounded-lg p-3">
+              <p className="text-zinc-400 text-[10px] uppercase">
+                Type
+              </p>
+
+              <p className="text-zinc-100 text-xs font-semibold mt-1 capitalize">
+                {type}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================
+   WALLETS TAB
+========================================================= */
+
+function WalletsTab({
+  users = [],
+}) {
+  const safeUsers = Array.isArray(users)
+    ? users
+    : [];
+
+  const [wallets, setWallets] =
+    useState([]);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [form, setForm] =
+    useState({
+      currency: 'USDT_TRC20',
+      address: '',
+      label: '',
+      network: 'TRC20',
+    });
+
+  const [adding, setAdding] =
+    useState(false);
+
+  const [refCode, setRefCode] =
+    useState('');
+
+  const [refOwner, setRefOwner] =
+    useState('');
+
+  const [refSaving, setRefSaving] =
+    useState(false);
+
+  const [refMsg, setRefMsg] =
+    useState('');
+
+  const [tgUsername, setTgUsername] =
+    useState('');
+
+  const [tgSaving, setTgSaving] =
+    useState(false);
+
+  const [tgMsg, setTgMsg] =
+    useState('');
+
+  const [walletActionId, setWalletActionId] =
+    useState(null);
+
+  const fetchWallets = useCallback(async () => {
+    try {
+      const { data } =
+        await api.get('/wallets/all');
+
+      setWallets(
+        asArray(data, [
+          'wallets',
+          'data',
+        ])
+      );
+    } catch (err) {
+      console.error(err);
+      setWallets([]);
+    }
+  }, []);
+
+  const fetchSettings = useCallback(async () => {
+    try {
+      const { data } =
+        await api.get('/settings');
+
+      let settings = data;
+
+      if (Array.isArray(data)) {
+        settings = {};
+
+        data.forEach((item) => {
+          if (
+            item?.key
+          ) {
+            settings[item.key] =
+              item.value;
+          }
+        });
+      }
+
+      if (
+        settings &&
+        typeof settings === 'object'
+      ) {
+        if (
+          settings.support_telegram
+        ) {
+          setTgUsername(
+            String(
+              settings.support_telegram
+            ).replace(
+              /^@/,
+              ''
+            )
+          );
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
+
+  const fetchReferral = useCallback(async () => {
+    try {
+      const { data } =
+        await api.get(
+          '/referrals/master'
+        );
+
+      if (data?.code) {
+        setRefCode(
+          String(data.code)
+        );
+      }
+
+      const ownerId =
+        data?.owner?._id ||
+        data?.owner?.id ||
+        data?.owner_id;
+
+      if (ownerId) {
+        setRefOwner(
+          String(ownerId)
+        );
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+
+    await Promise.allSettled([
+      fetchWallets(),
+      fetchSettings(),
+      fetchReferral(),
+    ]);
+
+    setLoading(false);
+  }, [
+    fetchWallets,
+    fetchSettings,
+    fetchReferral,
+  ]);
+
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
+
+  async function handleAdd(e) {
+    e.preventDefault();
+
+    if (!form.address.trim()) {
+      alert('Enter wallet address.');
+      return;
+    }
+
+    setAdding(true);
+
+    try {
+      await api.post(
+        '/wallets',
+        {
+          ...form,
+          address: form.address.trim(),
+        }
+      );
+
+      setForm({
+        currency: 'USDT_TRC20',
+        address: '',
+        label: '',
+        network: 'TRC20',
+      });
+
+      await fetchWallets();
+
+      alert('Wallet added successfully.');
+    } catch (err) {
+      console.error(err);
+
+      alert(
+        getApiError(
+          err,
+          'Failed to add wallet.'
+        )
+      );
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  async function handleDelete(id) {
+    if (!id) return;
+
+    const ok = window.confirm(
+      'Delete this wallet address?'
+    );
+
+    if (!ok) return;
+
+    setWalletActionId(id);
+
+    try {
+      await api.delete(
+        `/wallets/${id}`
+      );
+
+      await fetchWallets();
+    } catch (err) {
+      console.error(err);
+
+      alert(
+        getApiError(
+          err,
+          'Failed to delete wallet.'
+        )
+      );
+    } finally {
+      setWalletActionId(null);
+    }
+  }
+
+  async function handleRateSave() {
+    const value = parseFloat(inrRate);
+
+    if (!value || value <= 0) {
+      alert('Enter a valid INR rate.');
+      return;
+    }
+
+    setRateSaving(true);
+
+    try {
+      await api.put(
+        '/settings',
+        {
+          key: 'inr_rate',
+          value,
+        }
+      );
+
+      setInrRate(value);
+
+      alert(
+        'INR rate saved successfully.'
+      );
+    } catch (err) {
+      console.error(err);
+
+      alert(
+        getApiError(
+          err,
+          'Failed to save INR rate.'
+        )
+      );
+    } finally {
+      setRateSaving(false);
+    }
+  }
+
+  async function handleRefSave() {
+    if (
+      !refCode.trim() ||
+      !refOwner
+    ) {
+      setRefMsg(
+        'Enter referral code and select owner.'
+      );
+      return;
+    }
+
+    setRefSaving(true);
+    setRefMsg('');
+
+    try {
+      const { data } =
+        await api.post(
+          '/referrals/set-master',
+          {
+            code: refCode
+              .trim()
+              .toUpperCase(),
+            owner_id: refOwner,
+          }
+        );
+
+      const savedCode =
+        data?.code ||
+        refCode
+          .trim()
+          .toUpperCase();
+
+      setRefCode(savedCode);
+
+      setRefMsg(
+        `Saved! Signups now require code ${savedCode}`
+      );
+    } catch (err) {
+      console.error(err);
+
+      setRefMsg(
+        getApiError(
+          err,
+          'Failed to save referral code.'
+        )
+      );
+    } finally {
+      setRefSaving(false);
+    }
+  }
+
+  async function handleTgSave() {
+    const username =
+      tgUsername
+        .trim()
+        .replace(/^@/, '');
+
+    if (!username) {
+      setTgMsg(
+        'Enter Telegram username.'
+      );
+      return;
+    }
+
+    setTgSaving(true);
+    setTgMsg('');
+
+    try {
+      await api.put(
+        '/settings',
+        {
+          key: 'support_telegram',
+          value: username,
+        }
+      );
+
+      setTgUsername(username);
+
+      setTgMsg(
+        'Saved! Support button updated.'
+      );
+    } catch (err) {
+      console.error(err);
+
+      setTgMsg(
+        getApiError(
+          err,
+          'Failed to save Telegram username.'
+        )
+      );
+    } finally {
+      setTgSaving(false);
+    }
+  }
+
+  async function handleBankAdd(e) {
+    e.preventDefault();
+
+    if (
+      !bankForm.bank_name.trim() ||
+      !bankForm.account_holder.trim() ||
+      !bankForm.account_number.trim()
+    ) {
+      alert(
+        'Bank name, account holder and account number are required.'
+      );
+      return;
+    }
+
+    setBankAdding(true);
+
+    try {
+      await api.post(
+        '/banks',
+        bankForm
+      );
+
+      setBankForm({
+        bank_name: '',
+        account_holder: '',
+        account_number: '',
+        ifsc_code: '',
+        upi_id: '',
+        branch: '',
+        note: '',
+      });
+
+      await fetchBanks();
+
+      alert(
+        'Bank account added successfully.'
+      );
+    } catch (err) {
+      console.error(err);
+
+      alert(
+        getApiError(
+          err,
+          'Failed to add bank.'
+        )
+      );
+    } finally {
+      setBankAdding(false);
+    }
+  }
+
+  async function handleBankToggle(bank) {
+    const id = getId(bank);
+
+    if (!id) return;
+
+    setBankActionId(id);
+
+    try {
+      await api.put(
+        `/banks/${id}`,
+        {
+          is_active:
+            bank.is_active === false,
+        }
+      );
+
+      await fetchBanks();
+    } catch (err) {
+      console.error(err);
+
+      alert(
+        getApiError(
+          err,
+          'Failed to update bank.'
+        )
+      );
+    } finally {
+      setBankActionId(null);
+    }
+  }
+
+  async function handleBankDelete(id) {
+    if (!id) return;
+
+    const ok = window.confirm(
+      'Delete this bank account?'
+    );
+
+    if (!ok) return;
+
+    setBankActionId(id);
+
+    try {
+      await api.delete(
+        `/banks/${id}`
+      );
+
+      await fetchBanks();
+    } catch (err) {
+      console.error(err);
+
+      alert(
+        getApiError(
+          err,
+          'Failed to delete bank.'
+        )
+      );
+    } finally {
+      setBankActionId(null);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+
+      {/* INR RATE */}
+      <div className="bg-zinc-900 rounded-xl shadow-sm border border-gold-500/30 p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Scale className="w-4 h-4 text-gold-500" />
+
+          <h4 className="text-zinc-50 text-sm font-semibold">
+            INR Deposit Rate
+          </h4>
+        </div>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="w-32">
+            <input
+              type="number"
+              min="1"
+              step="0.01"
+              value={inrRate}
+              onChange={(e) =>
+                setInrRate(e.target.value)
+              }
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 text-sm"
+            />
+          </div>
+
+          <p className="text-zinc-400 text-xs">
+            INR per 1 USDT
+          </p>
+
+          <button
+            type="button"
+            onClick={handleRateSave}
+            disabled={rateSaving}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-gold-600 hover:bg-gold-700 text-white disabled:opacity-50"
+          >
+            {rateSaving ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Check className="w-3.5 h-3.5" />
+            )}
+            Save Rate
+          </button>
+        </div>
+      </div>
+
+      {/* REFERRAL */}
+      <div className="bg-zinc-900 rounded-xl shadow-sm border border-gold-500/30 p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Gift className="w-4 h-4 text-gold-500" />
+
+          <h4 className="text-zinc-50 text-sm font-semibold">
+            Referral Program
+          </h4>
+        </div>
+
+        <p className="text-zinc-400 text-xs mb-3">
+          Only the master referral code will be accepted at signup.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+          <div>
+            <label className="text-zinc-400 text-[10px] uppercase mb-1 block">
+              Master Referral Code
+            </label>
+
+            <input
+              type="text"
+              value={refCode}
+              onChange={(e) =>
+                setRefCode(
+                  e.target.value.toUpperCase()
+                )
+              }
+              placeholder="J9115UTT"
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 text-sm uppercase"
+            />
+          </div>
+
+          <div>
+            <label className="text-zinc-400 text-[10px] uppercase mb-1 block">
+              Owner Account
+            </label>
+
+            <select
+              value={refOwner}
+              onChange={(e) =>
+                setRefOwner(e.target.value)
+              }
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 text-sm"
+            >
+              <option value="">
+                Select account
+              </option>
+
+              {safeUsers.map((u) => (
+                <option
+                  key={getId(u)}
+                  value={getId(u)}
+                >
+                  {u.full_name || u.email} (
+                  {u.email || ''})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 mt-3 flex-wrap">
+          <button
+            type="button"
+            onClick={handleRefSave}
+            disabled={
+              refSaving ||
+              !refCode.trim() ||
+              !refOwner
+            }
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-gold-600 text-white disabled:opacity-50"
+          >
+            {refSaving ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Check className="w-3.5 h-3.5" />
+            )}
+            Save Referral Code
+          </button>
+
+          {refMsg && (
+            <p
+              className={`text-xs ${
+                refMsg.startsWith('Saved')
+                  ? 'text-emerald-600'
+                  : 'text-red-500'
+              }`}
+            >
+              {refMsg}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* TELEGRAM */}
+      <div className="bg-zinc-900 rounded-xl shadow-sm border border-gold-500/30 p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <Headphones className="w-4 h-4 text-gold-500" />
+
+          <h4 className="text-zinc-50 text-sm font-semibold">
+            Customer Support
+          </h4>
+        </div>
+
+        <p className="text-zinc-400 text-xs mb-3">
+          The floating support button uses this Telegram username.
+        </p>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="w-64">
+            <input
+              type="text"
+              value={tgUsername}
+              onChange={(e) =>
+                setTgUsername(
+                  e.target.value.replace(
+                    /^@/,
+                    ''
+                  )
+                )
+              }
+              placeholder="YourTelegramBot"
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 text-sm"
+            />
+          </div>
+
+          <span className="text-zinc-400 text-xs">
+            t.me/
+            <span className="font-semibold text-zinc-300">
+              {tgUsername || '...'}
+            </span>
+          </span>
+
+          <button
+            type="button"
+            onClick={handleTgSave}
+            disabled={
+              tgSaving ||
+              !tgUsername.trim()
+            }
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-gold-600 text-white disabled:opacity-50"
+          >
+            {tgSaving ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Check className="w-3.5 h-3.5" />
+            )}
+            Save
+          </button>
+
+          {tgMsg && (
+            <p
+              className={`text-xs ${
+                tgMsg.startsWith('Saved')
+                  ? 'text-emerald-600'
+                  : 'text-red-500'
+              }`}
+            >
+              {tgMsg}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* BANK FORM */}
+      <form
+        onSubmit={handleBankAdd}
+        className="bg-zinc-900 rounded-xl shadow-sm border border-gold-500/30 p-4"
+      >
+        <div className="flex items-center gap-2 mb-3">
+          <Banknote className="w-4 h-4 text-gold-500" />
+
+          <h4 className="text-zinc-50 text-sm font-semibold">
+            Add Bank Account
+          </h4>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            ['bank_name', 'Bank Name', 'HDFC Bank'],
+            ['account_holder', 'Account Holder', 'Account holder name'],
+            ['account_number', 'Account Number', 'Account number'],
+            ['ifsc_code', 'IFSC Code', 'HDFC0001234'],
+            ['upi_id', 'UPI ID', 'name@upi'],
+            ['branch', 'Branch', 'Branch (optional)'],
+            ['note', 'Note', 'Instruction note'],
+          ].map(
+            ([key, label, placeholder]) => (
+              <div key={key}>
+                <label className="text-zinc-400 text-[10px] uppercase mb-1 block">
+                  {label}
+                </label>
+
+                <input
+                  type="text"
+                  value={bankForm[key]}
+                  onChange={(e) =>
+                    setBankForm((prev) => ({
+                      ...prev,
+                      [key]: e.target.value,
+                    }))
+                  }
+                  placeholder={placeholder}
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 text-sm"
+                />
+              </div>
+            )
+          )}
+        </div>
+
+        <button
+          type="submit"
+          disabled={
+            bankAdding ||
+            !bankForm.bank_name.trim() ||
+            !bankForm.account_holder.trim() ||
+            !bankForm.account_number.trim()
+          }
+          className="mt-3 flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-gold-600 text-white disabled:opacity-50"
+        >
+          {bankAdding ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Plus className="w-3.5 h-3.5" />
+          )}
+          {bankAdding ? 'Adding...' : 'Add Bank Account'}
+        </button>
+      </form>
+
+      {/* BANK LIST */}
+      {banks.length > 0 && (
+        <div className="bg-zinc-900 rounded-xl shadow-sm border border-gold-500/30 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Landmark className="w-4 h-4 text-gold-500" />
+
+            <h4 className="text-zinc-50 text-sm font-semibold">
+              Bank Accounts ({banks.length})
+            </h4>
+          </div>
+
+          <div className="space-y-2">
+            {banks.map((b) => {
+              const id = getId(b);
+              const busy = bankActionId === id;
+
+              return (
+                <div
+                  key={id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-zinc-800 p-3"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-zinc-100 text-sm font-semibold">
+                        {b.bank_name || '-'}
+                      </p>
+
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          b.is_active === false
+                            ? 'bg-red-500/15 text-red-600'
+                            : 'bg-emerald-500/15 text-emerald-600'
+                        }`}
+                      >
+                        {b.is_active === false
+                          ? 'Inactive'
+                          : 'Active'}
+                      </span>
+                    </div>
+
+                    <p className="text-zinc-400 text-xs mt-0.5">
+                      {b.account_holder || ''} ·{' '}
+                      {b.account_number || ''}
+                      {b.ifsc_code
+                        ? ` · ${b.ifsc_code}`
+                        : ''}
+                      {b.upi_id
+                        ? ` · ${b.upi_id}`
+                        : ''}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        handleBankToggle(b)
+                      }
+                      className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium disabled:opacity-50 ${
+                        b.is_active === false
+                          ? 'bg-emerald-500/15 text-emerald-600'
+                          : 'bg-zinc-900 text-zinc-400'
+                      }`}
+                    >
+                      {busy ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : b.is_active === false ? (
+                        <ToggleRight className="w-3.5 h-3.5" />
+                      ) : (
+                        <ToggleLeft className="w-3.5 h-3.5" />
+                      )}
+
+                      {b.is_active === false
+                        ? 'Activate'
+                        : 'Deactivate'}
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        handleBankDelete(id)
+                      }
+                      className="p-2 rounded-lg hover:bg-red-500/15 text-zinc-400 hover:text-red-600 disabled:opacity-50"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* WALLET FORM */}
+      <form
+        onSubmit={handleAdd}
+        className="bg-zinc-900 rounded-xl shadow-sm border border-gold-500/30 p-4"
+      >
+        <h4 className="text-zinc-50 text-sm font-semibold mb-3">
+          Add Wallet Address
+        </h4>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+
+          <div>
+            <label className="text-zinc-400 text-[10px] uppercase mb-1 block">
+              Currency
+            </label>
+
+            <select
+              value={form.currency}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  currency: e.target.value,
+                }))
+              }
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 text-sm"
+            >
+              <option value="USDT_TRC20">
+                USDT (TRC20)
+              </option>
+              <option value="USDT_ERC20">
+                USDT (ERC20)
+              </option>
+              <option value="BTC">
+                Bitcoin (BTC)
+              </option>
+              <option value="ETH">
+                Ethereum (ETH)
+              </option>
+              <option value="USDC">
+                USD Coin (USDC)
+              </option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-zinc-400 text-[10px] uppercase mb-1 block">
+              Address
+            </label>
+
+            <input
+              type="text"
+              value={form.address}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  address: e.target.value,
+                }))
+              }
+              placeholder="Wallet address"
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="text-zinc-400 text-[10px] uppercase mb-1 block">
+              Label
+            </label>
+
+            <input
+              type="text"
+              value={form.label}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  label: e.target.value,
+                }))
+              }
+              placeholder="Label (optional)"
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="text-zinc-400 text-[10px] uppercase mb-1 block">
+              Network
+            </label>
+
+            <select
+              value={form.network}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  network: e.target.value,
+                }))
+              }
+              className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-zinc-100 text-sm"
+            >
+              <option value="TRC20">TRC20</option>
+              <option value="ERC20">ERC20</option>
+              <option value="BEP20">BEP20</option>
+              <option value="BTC">Bitcoin</option>
+              <option value="SPL">SPL</option>
+            </select>
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          disabled={
+            adding ||
+            !form.address.trim()
+          }
+          className="mt-3 flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-gold-600 text-white disabled:opacity-50"
+        >
+          {adding ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <Plus className="w-3.5 h-3.5" />
+          )}
+          {adding ? 'Adding...' : 'Add Wallet'}
+        </button>
+      </form>
+
+      {/* WALLET LIST */}
+      {loading ? (
+        <div className="flex justify-center py-12">
+          <div className="w-8 h-8 border-4 border-gold-500/40 border-t-gold-500 rounded-full animate-spin" />
+        </div>
+      ) : wallets.length === 0 ? (
+        <div className="text-center py-12">
+          <WalletCards className="w-12 h-12 text-zinc-500 mx-auto mb-3" />
+
+          <p className="text-zinc-400 text-sm">
+            No wallet addresses
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {wallets.map((w) => {
+            const id = getId(w);
+            const busy =
+              walletActionId === id;
+
+            return (
+              <div
+                key={id}
+                className="bg-zinc-900 rounded-xl shadow-sm border border-gold-500/30 p-4 flex items-center justify-between gap-3"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-gold-500/10 flex items-center justify-center">
+                    <Wallet className="w-5 h-5 text-gold-500" />
+                  </div>
+
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gold-500/10 text-gold-500">
+                        {w.currency || 'USDT'}
+                      </span>
+
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-900 text-zinc-400 border border-zinc-800">
+                        {w.network || 'TRC20'}
+                      </span>
+
+                      {w.label && (
+                        <span className="text-zinc-400 text-xs">
+                          {w.label}
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="text-zinc-100 text-xs font-mono truncate mt-1">
+                      {w.address || '-'}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    handleDelete(id)
+                  }
+                  className="flex-shrink-0 p-2 rounded-lg hover:bg-red-500/15 text-zinc-400 hover:text-red-600 disabled:opacity-50"
+                >
+                  {busy ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* =========================================================
+   ADMIN PAGE
+========================================================= */
+
+export default function Admin() {
+  const {
+    user,
+    loading: authLoading,
+  } = useAuth();
+
+  const navigate = useNavigate();
+
+  const [activeTab, setActiveTab] =
+    useState('users');
+
+  const [stats, setStats] =
+    useState(null);
+
+  const [users, setUsers] =
+    useState([]);
+
+  const [searchQuery, setSearchQuery] =
+    useState('');
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const fetchAdminData = useCallback(
+    async () => {
+      setLoading(true);
+
+      try {
+        const [
+          statsRes,
+          usersRes,
+        ] = await Promise.allSettled([
+          api.get('/admin/stats'),
+          api.get('/admin/users'),
+        ]);
+
+        if (
+          statsRes.status ===
+          'fulfilled'
+        ) {
+          const statsData =
+            statsRes.value?.data;
+
+          setStats(
+            statsData &&
+              typeof statsData ===
+                'object'
+              ? statsData
+              : {}
+          );
+        } else {
+          setStats({});
+        }
+
+        if (
+          usersRes.status ===
+          'fulfilled'
+        ) {
+          setUsers(
+            asArray(
+              usersRes.value?.data,
+              ['users', 'data']
+            )
+          );
+        } else {
+          setUsers([]);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (
+      !authLoading &&
+      user &&
+      user.role !== 'admin'
+    ) {
+      navigate(
+        '/dashboard',
+        { replace: true }
+      );
+    }
+  }, [
+    user,
+    authLoading,
+    navigate,
+  ]);
+
+  useEffect(() => {
+    if (
+      !authLoading &&
+      user?.role === 'admin'
+    ) {
+      fetchAdminData();
+    }
+  }, [
+    authLoading,
+    user,
+    fetchAdminData,
+  ]);
+
+  if (
+    authLoading ||
+    !user
+  ) {
+    return <Spinner />;
+  }
+
+  if (
+    user.role !== 'admin'
+  ) {
+    return <Spinner />;
+  }
+
+  const safeUsers =
+    Array.isArray(users)
+      ? users
+      : [];
+
+  const filteredUsers =
+    safeUsers.filter((u) => {
+      if (!searchQuery.trim())
+        return true;
+
+      const q =
+        searchQuery.toLowerCase();
+
+      return (
+        String(
+          u.full_name || ''
+        )
+          .toLowerCase()
+          .includes(q) ||
+        String(
+          u.email || ''
+        )
+          .toLowerCase()
+          .includes(q) ||
+        String(
+          u.mobile || ''
+        ).includes(q)
+      );
+    });
+
+  const totalUsers =
+    stats?.total_users ??
+    stats?.totalUsers ??
+    safeUsers.length ??
+    0;
+
+  const totalTrades =
+    stats?.total_trades ??
+    stats?.totalTrades ??
+    0;
+
+  const activeTrades =
+    stats?.active_trades ??
+    stats?.activeTrades ??
+    0;
+
+  const pendingTransactions =
+    stats?.pending_transactions ??
+    stats?.pendingTransactions ??
+    0;
+
+  const totalDeposits =
+    stats?.total_deposits ??
+    stats?.totalDeposits ??
+    0;
+
+  const totalWithdrawals =
+    stats?.total_withdrawals ??
+    stats?.totalWithdrawals ??
+    0;
+
+  return (
+    <div className="min-h-screen bg-zinc-900 relative overflow-hidden">
+
+      <div className="relative z-10 p-4 md:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
+
+        {/* HEADER */}
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-gold-500/10 flex items-center justify-center">
+              <ShieldCheck className="w-7 h-7 text-gold-500" />
+            </div>
+
+            <div>
+              <h1 className="font-heading text-2xl font-bold text-zinc-50">
+                Admin Panel
+              </h1>
+
+              <p className="text-zinc-400 text-sm">
+                Manage users, transactions, trades, wallets and notifications
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={fetchAdminData}
+            disabled={loading}
+            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-zinc-900 border border-gold-500/30 text-zinc-400 hover:bg-zinc-900 text-xs font-medium disabled:opacity-50"
+          >
+            <RefreshCw
+              className={`w-4 h-4 ${
+                loading ? 'animate-spin' : ''
+              }`}
+            />
+            Refresh
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center py-20">
+            <div className="w-10 h-10 border-4 border-gold-500/40 border-t-gold-500 rounded-full animate-spin" />
+          </div>
+        ) : (
+          <>
+            {/* STATS */}
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+
+              <StatCard
+                icon={Users}
+                label="Total Users"
+                value={totalUsers}
+                color="sky"
+              />
+
+              <StatCard
+                icon={ArrowLeftRight}
+                label="Total Trades"
+                value={totalTrades}
+                color="blue"
+              />
+
+              <StatCard
+                icon={Activity}
+                label="Active Trades"
+                value={activeTrades}
+                color="violet"
+              />
+
+              <StatCard
+                icon={Clock}
+                label="Pending Txns"
+                value={pendingTransactions}
+                color="red"
+              />
+
+              <StatCard
+                icon={TrendingUp}
+                label="Total Deposits"
+                value={formatCurrency(
+                  num(totalDeposits)
+                )}
+                color="emerald"
+              />
+
+              <StatCard
+                icon={TrendingDown}
+                label="Total Withdrawals"
+                value={formatCurrency(
+                  num(totalWithdrawals)
+                )}
+                color="cyan"
+              />
+            </div>
+
+            {/* TABS */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 bg-zinc-900 p-1.5 rounded-xl shadow-sm border border-gold-500/30">
+              {TABS.map((tab) => {
+                const TabIcon =
+                  tab.icon;
+
+                return (
+                  <button
+                    type="button"
+                    key={tab.id}
+                    onClick={() =>
+                      setActiveTab(
+                        tab.id
+                      )
+                    }
+                    className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                      activeTab === tab.id
+                        ? 'bg-gold-500/10 text-gold-500 shadow-sm'
+                        : 'text-zinc-400 hover:text-zinc-300 hover:bg-zinc-900'
+                    }`}
+                  >
+                    <TabIcon className="w-4 h-4" />
+
+                    <span>
+                      {tab.label}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* CONTENT */}
+            <div className="animate-fade-in">
+
+              {/* USERS */}
+              {activeTab === 'users' && (
+                <div className="space-y-4">
+
+                  <div className="flex items-center gap-3">
+                    <div className="relative flex-1 max-w-md">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) =>
+                          setSearchQuery(
+                            e.target.value
+                          )
+                        }
+                        placeholder="Search users..."
+                        className="w-full bg-zinc-900 border border-gold-500/30 rounded-lg pl-10 pr-4 py-2.5 text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-gold-500 shadow-sm"
+                      />
+                    </div>
+
+                    <span className="px-3 py-1.5 rounded-lg bg-zinc-900 text-zinc-400 text-xs font-medium border border-zinc-800">
+                      {filteredUsers.length} users
+                    </span>
+                  </div>
+
+                  <div className="space-y-3">
+                    {filteredUsers.map(
+                      (u) => (
+                        <UserCard
+                          key={getId(u)}
+                          user={u}
+                          onRefresh={
+                            fetchAdminData
+                          }
+                        />
+                      )
+                    )}
+
+                    {filteredUsers.length ===
+                      0 && (
+                      <div className="text-center py-12">
+                        <Users className="w-12 h-12 text-zinc-500 mx-auto mb-3" />
+
+                        <p className="text-zinc-400 text-sm">
+                          No users found
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* VERIFY */}
+              {activeTab === 'verify' && (
+                <VerifyTab
+                  onRefresh={
+                    fetchAdminData
+                  }
+                />
+              )}
+
+              {/* TRANSACTIONS */}
+              {activeTab === 'txns' && (
+                <TransactionsTab />
+              )}
+
+              {/* TRADES */}
+              {activeTab === 'data' && (
+                <TradeDataTab />
+              )}
+
+              {/* WALLETS */}
+              {activeTab === 'wallets' && (
+                <WalletsTab
+                  users={safeUsers}
+                />
+              )}
+
+              {/* NOTIFICATIONS */}
+              {activeTab ===
+                'notifications' && (
+                <NotificationsTab
+                  users={safeUsers}
+                />
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
