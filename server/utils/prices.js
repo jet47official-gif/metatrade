@@ -34,6 +34,44 @@ const BYBIT_TICKER_URL =
 const COINGECKO_URL =
   'https://api.coingecko.com/api/v3/simple/price';
 
+/*
+ * Kraken is used as a fallback because Binance and Bybit
+ * block requests coming from US data-centre IPs (HTTP 451),
+ * which is where Render hosts this API. Kraken serves US
+ * data centres, so it keeps prices working in production.
+ */
+const KRAKEN_TICKER_URL =
+  'https://api.kraken.com/0/public/Ticker';
+
+const KRAKEN_OHLC_URL =
+  'https://api.kraken.com/0/public/OHLC';
+
+const SYMBOL_TO_KRAKEN = {
+  BTC: 'XBT',
+  ETH: 'ETH',
+  BNB: 'BNB',
+  SOL: 'SOL',
+  XRP: 'XRP',
+  DOGE: 'XDG',
+  ADA: 'ADA',
+  DOT: 'DOT',
+};
+
+const KRAKEN_TO_SYMBOL = {
+  XBT: 'BTC',
+  XDG: 'DOGE',
+};
+
+const KRAKEN_INTERVALS = {
+  '1m': 1,
+  '5m': 5,
+  '15m': 15,
+  '30m': 30,
+  '1h': 60,
+  '4h': 240,
+  '1d': 1440,
+};
+
 const cache = {
   prices: null,
   pricesUpdatedAt: 0,
@@ -146,7 +184,40 @@ export async function getCryptoPrices() {
 
   /*
    * -------------------------------------------------------
-   * 3. COINGECKO
+   * 3. KRAKEN
+   * -------------------------------------------------------
+   *
+   * Binance and Bybit are geo-blocked on Render's US IPs,
+   * so Kraken is the most reliable source here.
+   */
+
+  const missingAfterBybit = COINS.filter(
+    (coin) => !result[coin]
+  );
+
+  if (missingAfterBybit.length > 0) {
+    try {
+      const kraken =
+        await fetchPricesFromKraken();
+
+      if (kraken) {
+        for (const coin of missingAfterBybit) {
+          if (kraken[coin]) {
+            result[coin] = kraken[coin];
+          }
+        }
+      }
+    } catch (error) {
+      console.warn(
+        'Kraken price fetch failed:',
+        error.message
+      );
+    }
+  }
+
+  /*
+   * -------------------------------------------------------
+   * 4. COINGECKO
    * -------------------------------------------------------
    *
    * Only request missing coins.
@@ -180,7 +251,7 @@ export async function getCryptoPrices() {
 
   /*
    * -------------------------------------------------------
-   * 4. If external APIs fail temporarily, keep previous
+   * 5. If external APIs fail temporarily, keep previous
    *    prices instead of returning an empty object.
    * -------------------------------------------------------
    */
@@ -350,6 +421,97 @@ async function fetchPricesFromBybit() {
 }
 
 /* =========================================================
+   KRAKEN
+   ========================================================= */
+
+async function fetchPricesFromKraken() {
+  const krakenCoins = COINS.filter(
+    (coin) => SYMBOL_TO_KRAKEN[coin]
+  );
+
+  const pairs = krakenCoins.map(
+    (coin) =>
+      SYMBOL_TO_KRAKEN[coin] + 'USDT'
+  );
+
+  const url =
+    KRAKEN_TICKER_URL + '?pair=' + pairs.join(',');
+
+  const res = await fetchWithTimeout(url);
+
+  if (!res.ok) {
+    throw new Error(
+      'Kraken status ' + res.status
+    );
+  }
+
+  const data = await res.json();
+
+  if (
+    Array.isArray(data.error) &&
+    data.error.length > 0
+  ) {
+    throw new Error(
+      'Kraken error ' + data.error[0]
+    );
+  }
+
+  const result = {};
+
+  for (const [key, item] of Object.entries(
+    data.result || {}
+  )) {
+    const base = key.replace(/USDT$/, '');
+
+    const symbol =
+      KRAKEN_TO_SYMBOL[base] || base;
+
+    if (!COINS.includes(symbol)) {
+      continue;
+    }
+
+    const price = Number(item.c && item.c[0]);
+
+    if (!Number.isFinite(price) || price <= 0) {
+      continue;
+    }
+
+    const open = Number(item.o) || 0;
+
+    const baseVolume =
+      Number(item.v && item.v[1]) || 0;
+
+    const vwap =
+      Number(item.p && item.p[1]) || 0;
+
+    result[symbol] = {
+      price,
+
+      change_24h:
+        open > 0
+          ? ((price - open) / open) * 100
+          : 0,
+
+      volume_24h:
+        vwap > 0
+          ? baseVolume * vwap
+          : baseVolume,
+
+      high_24h:
+        Number(item.h && item.h[1]) || 0,
+
+      low_24h:
+        Number(item.l && item.l[1]) || 0,
+
+      last_updated:
+        Math.floor(Date.now() / 1000),
+    };
+  }
+
+  return result;
+}
+
+/* =========================================================
    COINGECKO
    ========================================================= */
 
@@ -490,6 +652,27 @@ export async function getOHLC(
   }
 
   /*
+   * Kraken fallback (works from US data centres).
+   */
+  if (!ohlc) {
+    try {
+      ohlc =
+        await fetchOHLCFromKraken(
+          normalized,
+          interval,
+          limit
+        );
+    } catch (error) {
+      console.warn(
+        'Kraken OHLC fetch failed for ' +
+          normalized +
+          ':' +
+          error.message
+      );
+    }
+  }
+
+  /*
    * CoinGecko fallback.
    */
   if (!ohlc) {
@@ -559,6 +742,82 @@ async function fetchOHLCFromBinance(
     close: Number(k[4]),
     volume: Number(k[5]),
   }));
+}
+
+/* =========================================================
+   KRAKEN OHLC
+   ========================================================= */
+
+async function fetchOHLCFromKraken(
+  symbol,
+  interval,
+  limit
+) {
+  const base = SYMBOL_TO_KRAKEN[symbol];
+
+  if (!base) {
+    throw new Error(
+      'Kraken unsupported coin: ' + symbol
+    );
+  }
+
+  const minutes =
+    KRAKEN_INTERVALS[interval] || 15;
+
+  const url =
+    KRAKEN_OHLC_URL +
+    '?pair=' + base + 'USDT' +
+    '&interval=' + minutes;
+
+  const res = await fetchWithTimeout(url);
+
+  if (!res.ok) {
+    throw new Error(
+      'Kraken ohlc status ' + res.status
+    );
+  }
+
+  const data = await res.json();
+
+  if (
+    Array.isArray(data.error) &&
+    data.error.length > 0
+  ) {
+    throw new Error(
+      'Kraken ohlc error ' + data.error[0]
+    );
+  }
+
+  const resultObj = data.result || {};
+
+  const key = Object.keys(resultObj).find(
+    (k) => k !== 'last'
+  );
+
+  if (!key) {
+    return [];
+  }
+
+  const rows = resultObj[key];
+
+  if (!Array.isArray(rows)) {
+    return [];
+  }
+
+  let candles = rows.map((r) => ({
+    time: Math.floor(Number(r[0])),
+    open: Number(r[1]),
+    high: Number(r[2]),
+    low: Number(r[3]),
+    close: Number(r[4]),
+    volume: Number(r[6]),
+  }));
+
+  if (limit && candles.length > limit) {
+    candles = candles.slice(-limit);
+  }
+
+  return candles;
 }
 
 /* =========================================================
