@@ -331,7 +331,7 @@ export default function Home() {
             <div className="w-28 h-28 rounded-2xl bg-black ring-1 ring-gold-500/30 flex items-center justify-center mx-auto mb-4"><MTLogo className="w-24 h-24" /></div>
             <h2 className="font-heading text-3xl md:text-4xl font-bold text-white">Ready to start trading?</h2>
             <p className="text-gold-200 text-base mt-3 max-w-xl mx-auto">
-              Create your free account and make your first INR deposit today. Support is available 24/7.
+              Create your free account and make your first crypto deposit today. Support is available 24/7.
             </p>
             <Link to="/register" className="inline-flex items-center gap-2 px-8 py-3.5 rounded-xl bg-zinc-900 text-gold-500 font-bold mt-8 hover:bg-gold-500/10 transition-colors">
               Create Free Account
