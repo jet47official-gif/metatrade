@@ -11,8 +11,8 @@ import {
   Menu,
   X,
   ChevronLeft,
-  Diamond,
 } from 'lucide-react';
+import MTLogo from './MTLogo';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../lib/api';
 
@@ -98,8 +98,8 @@ export default function Layout() {
       `}>
         {(expanded || isMobile) && (
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center flex-shrink-0">
-              <Diamond size={16} className="text-white" />
+            <div className="w-12 h-12 rounded-lg bg-black ring-1 ring-gold-500/30 flex items-center justify-center flex-shrink-0">
+              <MTLogo size={44} className="text-white" />
             </div>
             <span className="text-sm font-bold text-gold-600 truncate whitespace-nowrap">
               Meta Trade
@@ -112,8 +112,8 @@ export default function Layout() {
           </button>
         )}
         {!isMobile && !expanded && (
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center">
-            <Diamond size={16} className="text-white" />
+          <div className="w-12 h-12 rounded-lg bg-black ring-1 ring-gold-500/30 flex items-center justify-center">
+            <MTLogo size={44} className="text-white" />
           </div>
         )}
       </div>
@@ -212,7 +212,7 @@ export default function Layout() {
   );
 
   return (
-    <div className="flex h-screen bg-zinc-900 text-zinc-50 overflow-hidden">
+    <div className="flex h-[calc(100vh-2.5rem)] bg-zinc-900 text-zinc-50 overflow-hidden">
       <div ref={sidebarRef} className="hidden md:block flex-shrink-0 transition-all duration-300 ease-in-out" style={{ width: expanded ? '224px' : '64px' }} onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}>
         <SidebarContent />
       </div>

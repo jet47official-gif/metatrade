@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Diamond,
   TrendingUp,
   TrendingDown,
   ShieldCheck,
@@ -19,6 +18,7 @@ import {
   X,
   Send,
 } from 'lucide-react';
+import MTLogo from '../components/MTLogo';
 import api from '../lib/api';
 import { formatCurrency, formatNumber } from '../lib/utils';
 
@@ -114,11 +114,11 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-zinc-900 text-zinc-50">
-      <header className="fixed top-0 inset-x-0 z-50 bg-zinc-900/85 backdrop-blur-md border-b border-gold-500/30">
+      <header className="fixed top-10 inset-x-0 z-50 bg-zinc-900/85 backdrop-blur-md border-b border-gold-500/30">
         <div className="max-w-7xl mx-auto px-4 md:px-6 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center">
-              <Diamond className="w-5 h-5 text-white" />
+            <div className="w-12 h-12 rounded-xl bg-black ring-1 ring-gold-500/30 flex items-center justify-center">
+              <MTLogo className="w-11 h-11 text-white" />
             </div>
             <span className="font-heading text-lg font-bold text-gold-600">Meta Trade</span>
           </Link>
@@ -328,7 +328,7 @@ export default function Home() {
           <div className="pointer-events-none absolute -top-16 -right-16 w-64 h-64 rounded-full bg-white/10 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-16 -left-16 w-64 h-64 rounded-full bg-white/10 blur-3xl" />
           <div className="relative">
-            <Diamond className="w-10 h-10 text-white/80 mx-auto mb-4" />
+            <div className="w-28 h-28 rounded-2xl bg-black ring-1 ring-gold-500/30 flex items-center justify-center mx-auto mb-4"><MTLogo className="w-24 h-24" /></div>
             <h2 className="font-heading text-3xl md:text-4xl font-bold text-white">Ready to start trading?</h2>
             <p className="text-gold-200 text-base mt-3 max-w-xl mx-auto">
               Create your free account and make your first INR deposit today. Support is available 24/7.
@@ -357,8 +357,8 @@ export default function Home() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             <div className="col-span-2 md:col-span-1">
               <div className="flex items-center gap-2 mb-3">
-                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center">
-                  <Diamond className="w-4 h-4 text-white" />
+                <div className="w-11 h-11 rounded-lg bg-black ring-1 ring-gold-500/30 flex items-center justify-center">
+                  <MTLogo className="w-10 h-10 text-white" />
                 </div>
                 <span className="font-heading text-base font-bold text-gold-500">Meta Trade</span>
               </div>

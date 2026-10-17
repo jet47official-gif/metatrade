@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Layout from './components/Layout';
 import SupportButton from './components/SupportButton';
+import PromoBanner from './components/PromoBanner';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -55,7 +56,9 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <PromoBanner />
         <SupportButton />
+        <div className="pt-10">
         <Routes>
           <Route path="/" element={<LandingRoute />} />
           <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
@@ -70,6 +73,7 @@ function App() {
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </div>
       </AuthProvider>
     </BrowserRouter>
   );

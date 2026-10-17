@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { Diamond, Loader2, Gift, Phone } from 'lucide-react';
+import { Loader2, Gift, Phone } from 'lucide-react';
+import MTLogo from '../components/MTLogo';
 import api from '../lib/api';
 
 const COUNTRY_CODES = [
@@ -87,11 +88,11 @@ useEffect(() => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-900 px-4">
+    <div className="min-h-[calc(100vh-2.5rem)] flex items-center justify-center bg-zinc-900 px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-2 mb-2">
-            <Diamond className="w-8 h-8 text-gold-500" />
+            <MTLogo className="w-16 h-16 text-gold-500" />
             <span className="text-3xl font-bold text-gold-600">Meta Trade</span>
           </div>
           <p className="text-zinc-400 text-sm">Secure cryptocurrency trading platform</p>

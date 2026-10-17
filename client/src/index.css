@@ -153,3 +153,16 @@ body {
 .recharts-cartesian-grid line { stroke: hsl(var(--border) / 0.5); }
 .recharts-surface { outline: none; }
 .recharts-tooltip-wrapper { outline: none; }
+
+@keyframes shimmer {
+  0% { transform: translateX(-150%) skewX(-12deg); }
+  60%, 100% { transform: translateX(280%) skewX(-12deg); }
+}
+.animate-shimmer { animation: shimmer 3.2s ease-in-out infinite; }
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.animate-marquee { animation: marquee 24s linear infinite; }
+.animate-marquee:hover { animation-play-state: paused; }
