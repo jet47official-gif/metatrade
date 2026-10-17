@@ -1,7 +1,13 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '/api' : 'http://localhost:5000/api'),
+  // In production the API lives on a different domain than the frontend,
+  // so we must use an absolute URL (env var is gitignored, hence the hardcoded fallback).
+  baseURL:
+    import.meta.env.VITE_API_URL ||
+    (import.meta.env.PROD
+      ? 'https://metatrade.onrender.com/api'
+      : 'http://localhost:5000/api'),
   headers: {
     'Content-Type': 'application/json',
   },
