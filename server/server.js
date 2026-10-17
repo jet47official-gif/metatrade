@@ -8,6 +8,7 @@ import connectDB from './config.js';
 import Trade from './models/Trade.js';
 import User from './models/User.js';
 import Notification from './models/Notification.js';
+import { getCryptoPrice } from './utils/prices.js';
 
 dotenv.config();
 
@@ -58,7 +59,19 @@ io.on('connection', (socket) => {
    EXPIRED TRADES
 ========================================================= */
 
+let isResolvingTrades = false;
+
 const resolveExpiredTrades = async () => {
+  /*
+   * Prevent overlapping runs from settling (and crediting)
+   * the same trade twice.
+   */
+  if (isResolvingTrades) {
+    return;
+  }
+
+  isResolvingTrades = true;
+
   try {
     // Make sure MongoDB is actually connected
     if (Trade.db.readyState !== 1) {
@@ -79,43 +92,36 @@ const resolveExpiredTrades = async () => {
 
     for (const trade of expiredTrades) {
       try {
-        const coinIdMap = {
-          BTC: 'bitcoin',
-          ETH: 'ethereum',
-          BNB: 'binancecoin',
-          SOL: 'solana',
-          XRP: 'ripple',
-          DOGE: 'dogecoin',
-          ADA: 'cardano',
-          DOT: 'polkadot',
-        };
+        /*
+         * Exit price via the shared price helper
+         * (Binance -> Bybit -> Kraken -> CoinGecko).
+         * It falls back to the entry price, so a price
+         * outage never blocks settling a trade.
+         */
+        let exitPrice = trade.entry_price;
 
-        const coinId = coinIdMap[trade.crypto] || 'bitcoin';
-
-        const priceRes = await fetch(
-          `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd`
-        );
-
-        if (!priceRes.ok) {
-          throw new Error(
-            `CoinGecko API returned status ${priceRes.status}`
+        try {
+          const livePrice = await getCryptoPrice(
+            trade.crypto
           );
+
+          if (livePrice) {
+            exitPrice = livePrice;
+          }
+        } catch (err) {
+          exitPrice = trade.entry_price;
         }
 
-        const priceData = await priceRes.json();
-
-        const exitPrice =
-          priceData[coinId]?.usd || trade.entry_price;
-
+        /*
+         * Every trade wins automatically. An admin can still
+         * force a result with admin_outcome ('won' | 'lost').
+         */
         let won;
 
         if (trade.admin_outcome) {
           won = trade.admin_outcome === 'won';
         } else {
-          won =
-            trade.direction === 'buy'
-              ? exitPrice > trade.entry_price
-              : exitPrice < trade.entry_price;
+          won = true;
         }
 
         trade.exit_price = exitPrice;
@@ -187,6 +193,8 @@ const resolveExpiredTrades = async () => {
       'Error in resolveExpiredTrades:',
       error.message
     );
+  } finally {
+    isResolvingTrades = false;
   }
 };
 

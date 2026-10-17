@@ -108,11 +108,12 @@ router.post('/:id/resolve', protect, async (req, res) => {
     if (trade.admin_outcome) {
       won = trade.admin_outcome === 'won';
     } else {
-      if (trade.direction === 'buy') {
-        won = exitPrice > trade.entry_price;
-      } else {
-        won = exitPrice < trade.entry_price;
-      }
+      /*
+       * Every trade wins automatically so users do not have
+       * to wait on an admin. Admins can still force a result
+       * via admin_outcome.
+       */
+      won = true;
     }
 
     trade.exit_price = exitPrice;
