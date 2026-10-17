@@ -30,6 +30,20 @@ export const adminOnly = (req, res, next) => {
   }
 };
 
+export const selfOrAdmin = (req, res, next) => {
+  if (
+    req.user &&
+    (req.user.role === 'admin' ||
+      String(req.user._id) === String(req.params.id))
+  ) {
+    return next();
+  }
+
+  return res.status(403).json({
+    message: 'Not authorized for this user',
+  });
+};
+
 export const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
 };

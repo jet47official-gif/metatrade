@@ -1,6 +1,11 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
+import {
+  protect,
+  adminOnly,
+  selfOrAdmin,
+} from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -101,7 +106,7 @@ function ensureWithdrawalAllowed(user, amount = 0) {
 |--------------------------------------------------------------------------
 */
 
-router.get('/', async (req, res) => {
+router.get('/', protect, adminOnly, async (req, res) => {
   try {
     const users = await User.find()
       .populate(
@@ -140,7 +145,7 @@ router.get('/', async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', protect, selfOrAdmin, async (req, res) => {
   try {
     const user = await User.findById(req.params.id).populate(
       'referred_by',
@@ -175,7 +180,7 @@ router.get('/:id', async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', protect, adminOnly, async (req, res) => {
   try {
     const allowedFields = [
       'full_name',
@@ -237,7 +242,7 @@ router.put('/:id', async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-router.post('/:id/toggle', async (req, res) => {
+router.post('/:id/toggle', protect, adminOnly, async (req, res) => {
   try {
     const { field } = req.body;
 
@@ -287,7 +292,7 @@ router.post('/:id/toggle', async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-router.post('/:id/adjust-balance', async (req, res) => {
+router.post('/:id/adjust-balance', protect, adminOnly, async (req, res) => {
   try {
     const {
       action,
@@ -367,7 +372,7 @@ router.post('/:id/adjust-balance', async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-router.post('/:id/freeze', async (req, res) => {
+router.post('/:id/freeze', protect, adminOnly, async (req, res) => {
   try {
     const value = toNumber(
       req.body.amount,
@@ -445,7 +450,7 @@ router.post('/:id/freeze', async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-router.post('/:id/unfreeze', async (req, res) => {
+router.post('/:id/unfreeze', protect, adminOnly, async (req, res) => {
   try {
     const value = toNumber(
       req.body.amount,
@@ -518,7 +523,7 @@ router.post('/:id/unfreeze', async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-router.post('/:id/add-deposit', async (req, res) => {
+router.post('/:id/add-deposit', protect, adminOnly, async (req, res) => {
   try {
     const value = toNumber(
       req.body.amount,
@@ -570,7 +575,7 @@ router.post('/:id/add-deposit', async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-router.post('/:id/add-withdrawal', async (req, res) => {
+router.post('/:id/add-withdrawal', protect, adminOnly, async (req, res) => {
   try {
     const value = toNumber(
       req.body.amount,
@@ -620,7 +625,7 @@ router.post('/:id/add-withdrawal', async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-router.post('/:id/add-profit', async (req, res) => {
+router.post('/:id/add-profit', protect, adminOnly, async (req, res) => {
   try {
     const value = toNumber(
       req.body.amount,
@@ -672,7 +677,7 @@ router.post('/:id/add-profit', async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-router.post('/:id/set-credit-score', async (req, res) => {
+router.post('/:id/set-credit-score', protect, adminOnly, async (req, res) => {
   try {
     const score = parseInt(
       req.body.score,
@@ -717,7 +722,7 @@ router.post('/:id/set-credit-score', async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-router.post('/:id/adjust-credit-score', async (req, res) => {
+router.post('/:id/adjust-credit-score', protect, adminOnly, async (req, res) => {
   try {
     const amount = parseInt(
       req.body.amount,
@@ -768,7 +773,7 @@ router.post('/:id/adjust-credit-score', async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-router.post('/:id/set-password', async (req, res) => {
+router.post('/:id/set-password', protect, adminOnly, async (req, res) => {
   try {
     const password =
       String(req.body.password || '');
@@ -821,6 +826,8 @@ router.post('/:id/set-password', async (req, res) => {
 
 router.post(
   '/:id/set-withdrawal-password',
+  protect,
+  adminOnly,
   async (req, res) => {
     try {
       const withdrawalPassword =
@@ -883,7 +890,7 @@ router.post(
 |--------------------------------------------------------------------------
 */
 
-router.post('/:id/verify', async (req, res) => {
+router.post('/:id/verify', protect, adminOnly, async (req, res) => {
   try {
     const status =
       String(req.body.status || '');
@@ -942,7 +949,7 @@ router.post('/:id/verify', async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', protect, adminOnly, async (req, res) => {
   try {
     const user =
       await User.findByIdAndDelete(
@@ -979,7 +986,7 @@ router.delete('/:id', async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-router.get('/:id/balance-status', async (req, res) => {
+router.get('/:id/balance-status', protect, selfOrAdmin, async (req, res) => {
   try {
     const user =
       await User.findById(req.params.id)
@@ -1029,7 +1036,7 @@ router.get('/:id/balance-status', async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-router.get('/:id/trading-check', async (req, res) => {
+router.get('/:id/trading-check', protect, selfOrAdmin, async (req, res) => {
   try {
     const amount = toNumber(
       req.query.amount,
@@ -1095,7 +1102,7 @@ router.get('/:id/trading-check', async (req, res) => {
 |--------------------------------------------------------------------------
 */
 
-router.get('/:id/withdrawal-check', async (req, res) => {
+router.get('/:id/withdrawal-check', protect, selfOrAdmin, async (req, res) => {
   try {
     const amount = toNumber(
       req.query.amount,

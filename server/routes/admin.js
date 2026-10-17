@@ -294,7 +294,7 @@ router.get('/trades', protect, adminOnly, async (req, res) => {
 // ==========================================
 // CREATE / UPDATE ADMIN
 // ==========================================
-router.post('/create-admin', async (req, res) => {
+router.post('/create-admin', protect, adminOnly, async (req, res) => {
   try {
     const {
       email,
