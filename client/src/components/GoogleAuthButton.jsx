@@ -17,7 +17,8 @@ export default function GoogleAuthButton({
 
   const clientId =
     import.meta.env.VITE_GOOGLE_CLIENT_ID ||
-    '';
+    import.meta.env.GOOGLE_CLIENT_ID ||
+    '36724099422-jkapeub2b9p9g0j6aff9mgf8mu1qi7jd.apps.googleusercontent.com';
 
   useEffect(() => {
     if (!clientId || scriptLoadedRef.current) return;
