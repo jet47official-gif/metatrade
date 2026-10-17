@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import GoogleAuthButton from '../components/GoogleAuthButton';
+import { useAuth } from '../contexts/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import MTLogo from '../components/MTLogo';
