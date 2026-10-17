@@ -11,34 +11,24 @@ const REFERRAL_BONUS = 5;
 // Fixed master referral code for signup
 const MASTER_REFERRAL_CODE = 'J9115UTT';
 
-function generateReferralCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = '';
-
-  for (let i = 0; i < 8; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
-
-  return code;
-}
+const GOOGLE_CLIENT_ID =
+  process.env.GOOGLE_CLIENT_ID ||
+  (import.meta.env?.VITE_GOOGLE_CLIENT_ID || '');
 
 async function getUniqueReferralCode() {
   for (let attempt = 0; attempt < 5; attempt++) {
     const code = generateReferralCode();
-
-    const existing = await User.findOne({
-      referral_code: code,
-    });
-
-    if (!existing) {
-      return code;
-    }
+    const existing = await User.findOne({ referral_code: code });
+    if (!existing) return code;
   }
+  return generateReferralCode() + Date.now().toString(36).toUpperCase().slice(-4);
+}
 
-  return (
-    generateReferralCode() +
-    Date.now().toString(36).toUpperCase().slice(-4)
-  );
+async function generateReferralCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 8; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
 }
 
 
@@ -441,8 +431,78 @@ router.post(
 
 
 /* =========================
-   CHANGE PASSWORD
+   GOOGLE AUTHENTICATION
 ========================= */
+
+router.post('/google', async (req, res) => {
+  try {
+    const { credential } = req.body;
+    if (!credential) {
+      return res.status(400).json({ message: 'Google credential is required' });
+    }
+
+    const clientId = GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      console.warn('GOOGLE_CLIENT_ID not configured');
+    }
+
+    let email, name, picture, sub, emailVerified;
+
+    const tokenUrl = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(credential);
+    const r = await fetch(tokenUrl);
+    if (!r.ok) {
+      const err = await r.text();
+      console.error('Google tokeninfo failed:', r.status, err);
+      return res.status(401).json({ message: 'Invalid Google credential' });
+    }
+    const info = await r.json();
+    email = info.email;
+    name = info.name || '';
+    picture = info.picture || '';
+    sub = info.sub;
+    emailVerified = info.email_verified === 'true' || info.email_verified === true;
+    if (clientId && info.aud && info.aud !== clientId) {
+      return res.status(401).json({ message: 'Invalid Google client ID' });
+    }
+    if (!email) {
+      return res.status(401).json({ message: 'Google email not found' });
+    }
+
+    let user = await User.findOne({ email: String(email).toLowerCase().trim() });
+    if (!user) {
+      const normalizedEmail = String(email).toLowerCase().trim();
+      const randomPassword = 'google_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+      const userReferralCode = await getUniqueReferralCode();
+      user = await User.create({
+        email: normalizedEmail,
+        password: randomPassword,
+        full_name: name,
+        avatar: picture,
+        referral_code: userReferralCode,
+        google_id: sub,
+        is_verified: !!emailVerified,
+        mobile: '',
+        country_code: '',
+        referred_by: null,
+      });
+      console.log('User registered via Google:', user.email);
+    } else {
+      if (!user.google_id && sub) {
+        user.google_id = sub;
+        if (picture && !user.avatar) user.avatar = picture;
+        if (name && !user.full_name) user.full_name = name;
+        if (emailVerified) user.is_verified = true;
+        await user.save();
+      }
+    }
+
+    const token = generateToken(user._id);
+    res.status(200).json({ token, user });
+  } catch (error) {
+    console.error('GOOGLE AUTH ERROR:', error);
+    res.status(500).json({ message: error.message || 'Google authentication failed' });
+  }
+});
 
 router.post(
   '/change-password',

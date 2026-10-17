@@ -148,9 +148,10 @@ const userSchema = new mongoose.Schema({
     select: false
   },
 
-  is_verified: {
-    type: Boolean,
-    default: false
+  google_id: {
+    type: String,
+    default: null,
+    sparse: true
   }
 
 }, {
