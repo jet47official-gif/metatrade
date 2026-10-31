@@ -70,7 +70,11 @@ const ensureSeed = async () => {
 const connectDB = async () => {
   try {
     let uri = process.env.MONGODB_URI;
-    const needsPlaceholder = !uri || uri.includes('your-username') || uri.includes('<password>');
+    const needsPlaceholder =
+      !uri ||
+      /<[^>]+>/.test(uri) ||
+      uri.includes('your-username') ||
+      uri.includes('your-mongodb-atlas-uri');
 
     if (needsPlaceholder) {
       if (hasLocalBinary()) {
