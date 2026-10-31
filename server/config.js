@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import User from './models/User.js';
 import WalletAddress from './models/WalletAddress.js';
@@ -88,15 +89,17 @@ const connectDB = async () => {
 
     if (!uri) {
       console.log('[DB] Running WITHOUT a database. Set MONGODB_URI in server/.env (MongoDB Atlas) to enable login & data.');
-      return;
+      return false;
     }
 
     await mongoose.connect(uri, { serverSelectionTimeoutMS: 8000 });
     console.log('[DB] MongoDB connected: ' + mongoose.connection.host);
     await ensureSeed();
+    return true;
   } catch (error) {
     console.log('[DB] WARNING: MongoDB not connected (' + error.message + ').');
     console.log('[DB] Server still running, but login/data are disabled until MONGODB_URI is set.');
+    return false;
   }
 };
 

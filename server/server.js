@@ -9,6 +9,7 @@ import Trade from './models/Trade.js';
 import User from './models/User.js';
 import Notification from './models/Notification.js';
 import { getCryptoPrice } from './utils/prices.js';
+import authRoutes from './routes/auth.js';
 
 dotenv.config();
 
@@ -24,6 +25,7 @@ const io = new Server(server, {
 
 app.use(cors());
 app.use(express.json());
+app.use('/api/auth', authRoutes);
 
 /* =========================================================
    BASIC TEST ROUTE
@@ -206,16 +208,15 @@ const startServer = async () => {
   try {
     console.log('Connecting to MongoDB...');
 
-    await connectDB();
+    const databaseConnected = await connectDB();
 
-    console.log('MongoDB connected successfully');
+    if (databaseConnected) {
+      console.log('MongoDB connection ready');
+    }
 
     /* =====================================================
        API ROUTES
     ===================================================== */
-
-    const authRoutes =
-      (await import('./routes/auth.js')).default;
 
     const userRoutes =
       (await import('./routes/users.js')).default;
@@ -244,7 +245,6 @@ const startServer = async () => {
     const adminRoutes =
       (await import('./routes/admin.js')).default;
 
-    app.use('/api/auth', authRoutes);
     app.use('/api/users', userRoutes);
     app.use('/api/trades', tradeRoutes);
     app.use('/api/transactions', transactionRoutes);

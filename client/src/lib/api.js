@@ -1,8 +1,6 @@
 import axios from 'axios';
 
 const api = axios.create({
-  // In production the API lives on a different domain than the frontend,
-  // so we must use an absolute URL (env var is gitignored, hence the hardcoded fallback).
   baseURL:
     import.meta.env.VITE_API_URL ||
     (import.meta.env.PROD

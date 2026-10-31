@@ -47,12 +47,33 @@ router.post('/register', async (req, res) => {
       country_code,
     } = req.body;
 
-    console.log('Register request:', email);
+    const normalizedEmail = typeof email === 'string' ? email.toLowerCase().trim() : '';
+    const normalizedPassword = typeof password === 'string' ? password : '';
+    const normalizedFullName = typeof full_name === 'string' ? full_name.trim() : '';
 
     // Email and password
-    if (!email || !password) {
+    if (!normalizedEmail || !normalizedPassword) {
       return res.status(400).json({
         message: 'Email and password are required',
+      });
+    }
+
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(normalizedEmail)) {
+      return res.status(400).json({
+        message: 'Please enter a valid email address',
+      });
+    }
+
+    if (normalizedPassword.length < 6 || normalizedPassword.length > 128) {
+      return res.status(400).json({
+        message: 'Password must be between 6 and 128 characters',
+      });
+    }
+
+    if (!normalizedFullName) {
+      return res.status(400).json({
+        message: 'Full name is required',
       });
     }
 
@@ -74,8 +95,11 @@ router.post('/register', async (req, res) => {
       });
     }
 
-    // Normalize email
-    const normalizedEmail = email.toLowerCase().trim();
+    if (User.db.readyState !== 1) {
+      return res.status(503).json({
+        message: 'Database is unavailable. Please try again later.',
+      });
+    }
 
     // Check existing user
     const existingUser = await User.findOne({
@@ -83,8 +107,8 @@ router.post('/register', async (req, res) => {
     });
 
     if (existingUser) {
-      return res.status(400).json({
-        message: 'User already exists',
+      return res.status(409).json({
+        message: 'An account with this email already exists',
       });
     }
 
@@ -95,8 +119,8 @@ router.post('/register', async (req, res) => {
     // Create user
     const user = await User.create({
       email: normalizedEmail,
-      password,
-      full_name: full_name || '',
+      password: normalizedPassword,
+      full_name: normalizedFullName,
       mobile: String(mobile).trim(),
       country_code: String(country_code).trim(),
 
@@ -125,10 +149,20 @@ router.post('/register', async (req, res) => {
       error
     );
 
+    if (error?.code === 11000) {
+      return res.status(409).json({
+        message: 'An account with this email already exists',
+      });
+    }
+
+    if (error?.name === 'ValidationError') {
+      return res.status(400).json({
+        message: Object.values(error.errors)[0]?.message || 'Invalid registration data',
+      });
+    }
+
     res.status(500).json({
-      message:
-        error.message ||
-        'Registration failed',
+      message: 'Registration failed',
     });
   }
 });
@@ -149,10 +183,16 @@ router.post('/login', async (req, res) => {
       password,
     } = req.body;
 
-    if (!email || !password) {
+    if (typeof email !== 'string' || typeof password !== 'string' || !email.trim() || !password) {
       return res.status(400).json({
         message:
           'Email and password are required',
+      });
+    }
+
+    if (User.db.readyState !== 1) {
+      return res.status(503).json({
+        message: 'Database is unavailable. Please try again later.',
       });
     }
 
@@ -234,9 +274,7 @@ router.post('/login', async (req, res) => {
     );
 
     res.status(500).json({
-      message:
-        error.message ||
-        'Login failed',
+      message: 'Login failed',
     });
   }
 });
