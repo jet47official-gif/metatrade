@@ -51,6 +51,12 @@ router.post('/register', async (req, res) => {
     const normalizedPassword = typeof password === 'string' ? password : '';
     const normalizedFullName = typeof full_name === 'string' ? full_name.trim() : '';
 
+    if (!process.env.JWT_SECRET) {
+      return res.status(503).json({
+        message: 'Authentication service is not configured',
+      });
+    }
+
     // Email and password
     if (!normalizedEmail || !normalizedPassword) {
       return res.status(400).json({
@@ -198,6 +204,12 @@ router.post('/login', async (req, res) => {
 
     const normalizedEmail =
       email.toLowerCase().trim();
+
+    if (!process.env.JWT_SECRET) {
+      return res.status(503).json({
+        message: 'Authentication service is not configured',
+      });
+    }
 
     console.log(
       'Looking for user:',
