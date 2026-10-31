@@ -1,8 +1,10 @@
 import axios from 'axios';
 
+const configuredApiUrl = import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, '');
+
 const api = axios.create({
   baseURL:
-    import.meta.env.VITE_API_URL ||
+    configuredApiUrl ||
     (import.meta.env.PROD
       ? 'https://metatrade.onrender.com/api'
       : 'http://localhost:5000/api'),
