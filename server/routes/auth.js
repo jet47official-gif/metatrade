@@ -17,11 +17,19 @@ const GOOGLE_CLIENT_ID =
 
 async function getUniqueReferralCode() {
   for (let attempt = 0; attempt < 5; attempt++) {
-    const code = generateReferralCode();
-    const existing = await User.findOne({ referral_code: code });
-    if (!existing) return code;
+    const code = await generateReferralCode();
+
+    const existing = await User.findOne({
+      referral_code: code
+    });
+
+    if (!existing) {
+      return code;
+    }
   }
-  return generateReferralCode() + Date.now().toString(36).toUpperCase().slice(-4);
+
+  return (await generateReferralCode()) +
+    Date.now().toString(36).toUpperCase().slice(-4);
 }
 
 async function generateReferralCode() {
